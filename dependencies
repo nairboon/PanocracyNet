@@ -1,0 +1,5 @@
+Dependencies
+
+
+* libzmq-dev
+* libsqlite3-dev

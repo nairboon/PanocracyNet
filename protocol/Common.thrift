@@ -13,9 +13,15 @@ enum Transport {
 
 
 struct Gene {
-  1: i32 min,
-  2: i32 max,
-  3: i32 value
+  1: i32 value
 }
 
 typedef map<string,Gene> DNA
+
+struct Peer {
+ 1: string ip
+}
+
+struct Timestamp {
+ 1: i32 sec
+}

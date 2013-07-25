@@ -15,8 +15,8 @@ func (*AnEvoConnection) Connect(port int) {
  log.Printf("Connecting on: %d",port)
 }
 
-func (*AnEvoConnection) Register(name string, dna Common.DNA) {
-
+func (*AnEvoConnection) Register(name string, dna Common.DNA) Common.DNA {
+ return dna // check db for better dna
 }
 
 func NewConnection() *AnEvoConnection {

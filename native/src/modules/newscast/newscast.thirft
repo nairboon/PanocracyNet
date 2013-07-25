@@ -1,0 +1,22 @@
+namespace go newscast_protocol
+
+
+include "../../../../protocol/Common.thrift"
+
+
+const Common.DNA ROOT_DNA = {'timeout': {'value': 500}, 'cache': {'value': 10}}
+
+
+struct CacheEntry {
+  1: Common.Peer Agent,
+  2: Common.Timestamp Time
+  // Newscast protocol adds AgentID and Application-specific data
+}
+
+struct PeerState {
+  1: set<CacheEntry> NewsItems
+}
+
+service newscast {
+  PeerState sendstate(1:PeerState s)
+}

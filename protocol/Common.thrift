@@ -1,5 +1,5 @@
 namespace js services
-
+namespace go common
 
 const string VERSION = "0.1.0"
 

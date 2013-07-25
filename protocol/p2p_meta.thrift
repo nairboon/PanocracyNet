@@ -1,11 +1,11 @@
 namespace js services
 
 
-include "common.thrift"
+include "Common.thrift"
 
 
 struct Hello {
-  1: string version = common.VERSION,
+  1: string version = Common.VERSION,
   2: string node_id,
   3: string tag,
   4: map<string,double> strategy_success

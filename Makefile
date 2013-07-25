@@ -1,24 +1,9 @@
 
-GOPATH := $(CURDIR)/native
 
-all: daemon launcher library modules
+all: native
 
-protocol: 
-	thrift --gen go -o protocol protocol/p2p_meta.thrift
-	thrift --gen go -o protocol protocol/anevonet_rpc.thrift
+native:
+	$(MAKE) -C native/src
 
-daemon:
-	gd native/src/daemon -o native/bin/daemon
 
-launcher: 
-	gd native/src/launcher -o native/bin/launcher
-
-library:
-	#mkdir -p native/goroot/src/github.com/nairboon/anevonet
-	#ln -sf ../../../../../../native/src/lib native/goroot/src/github.com/nairboon/anevonet/
-	gd native/src/libanevonet/
-modules:
-	mkdir -p native/bin/modules
-	gd -I native/src/libanevonet native/src/modules/newscast -o native/bin/modules/newscast
-
-.PHONY: protocol
+.PHONY: native

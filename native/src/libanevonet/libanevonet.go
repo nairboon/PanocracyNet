@@ -1,6 +1,30 @@
 package libanevonet
 
+import (
+	flag "github.com/ogier/pflag"
+	"log"
+	"Common"
+)
 
-func RegisterModule(x float64) float64 {
- return 42.7
+type AnEvoConnection struct {
+
+
+}
+
+func (*AnEvoConnection) Connect(port int) {
+ log.Printf("Connecting on: %d",port)
+}
+
+func (*AnEvoConnection) Register(name string, dna Common.DNA) {
+
+}
+
+func NewConnection() *AnEvoConnection {
+  c := &AnEvoConnection{}
+  var port int
+ 	flag.IntVar(&port, "port", 9000, "port of the daemon")
+	flag.Parse()
+	c.Connect(port)
+
+ return c
 }

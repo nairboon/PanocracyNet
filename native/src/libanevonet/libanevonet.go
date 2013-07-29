@@ -6,8 +6,22 @@ import (
 	"Common"
 )
 
-type AnEvoConnection struct {
+/* client side connection to the daemon */
+type client struct {
 
+}
+
+
+/* Server, used for messages from the daemon*/
+type server struct {
+
+}
+
+
+/* we abstract this and export an AnEvo Connection which is bidirectional */
+type AnEvoConnection struct {
+ Client client
+ Server server
 
 }
 

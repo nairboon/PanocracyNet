@@ -1,10 +1,9 @@
 namespace go newscast_protocol
 
-
 include "../../../../protocol/Common.thrift"
 
 
-const Common.DNA ROOT_DNA = {'timeout': {'value': 500}, 'cache': {'value': 10}}
+const Common.DNA RootDNA = {"timeout": 500, "cache": 10}
 
 
 struct CacheEntry {

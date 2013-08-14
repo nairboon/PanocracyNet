@@ -6,7 +6,7 @@ import (
 ae "libanevonet"
 "log"
  //"Common"
-"newscast_protocol"
+proto "newscast_protocol"
 )
 
 
@@ -15,8 +15,9 @@ func main() {
 	log.Printf("newscasting")
 
 con := ae.NewConnection()
+dna := con.Register("Newscast", proto.RootDNA)
 
-dna := con.Register("Newscast", newscast_protocol.ROOT_DNA)
+
   /* connect to daemon
    register protocol
    name, dna 

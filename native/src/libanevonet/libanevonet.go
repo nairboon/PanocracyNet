@@ -5,8 +5,10 @@ import (
 	"log"
 	"Common"
 	"fmt"
+ rpc "anevonet_rpc"
 "io"
 	zmq "github.com/vaughan0/go-zmq"
+	"github.com/samuel/go-thrift/thrift"
 )
 
 /* zeromq connection */
@@ -49,7 +51,7 @@ c.chanReader = newChanReader(c.Chans.In())
 
 /* client side connection to the daemon */
 type client struct {
-
+ zmq *zmqConnection
 }
 
 
@@ -58,21 +60,45 @@ type server struct {
 
 }
 
+type RPCClient interface {
+	Call(method string, request interface{}, response interface{}) error
+}
 
 /* we abstract this and export an AnEvo Connection which is bidirectional */
 type AnEvoConnection struct {
  Client client
  Server server
-
+ Rpc rpc.LocalRpcClient
+ Connections map[Common.Peer]RPCClient
 }
 
-func (*AnEvoConnection) Connect(port int) {
+func (a *AnEvoConnection) Connect(port int) {
  log.Printf("Connecting on: %d",port)
+  a.Client.zmq = newZMQConnection(port)
 
+client := thrift.NewClient(thrift.NewFramedReadWriteCloser(a.Client.zmq, 0), thrift.NewBinaryProtocol(true, false),false)
+
+ a.Rpc = rpc.LocalRpcClient{client}
 }
 
-func (*AnEvoConnection) Register(name string, dna Common.DNA) Common.DNA {
- return dna // check db for better dna
+func (*AnEvoConnection) ContinueRunning(dna Common.DNA) bool{
+ return true
+}
+
+func (a *AnEvoConnection) GetPeerConnection(p Common.Peer) RPCClient {
+ 
+ r,err  := a.Rpc.RequestConnection(&rpc.ConnectionReq{Target: &p})
+if err != nil {
+		panic(err)
+	}
+
+ //return 0
+}
+
+func (*AnEvoConnection) Register(name string, rootdna Common.DNA, dna Common.DNA){
+
+// check db for better dna
+dna = rootdna
 }
 
 func NewConnection() *AnEvoConnection {
@@ -81,7 +107,7 @@ func NewConnection() *AnEvoConnection {
  	flag.IntVar(&port, "port", 9000, "port of the daemon")
 	flag.Parse()
 
-
+ c.Connect(port)
 
 return c
 }
@@ -116,6 +142,10 @@ func (r *chanReader) Read(buf []byte) (int, error) {
         n := copy(buf, r.resbuf)
 	r.resbuf = r.resbuf[n:]
         return n, nil
+}
+
+func (r *chanReader) Close() error {
+	return nil
 }
 
 // chanWriter writes on the channel when its

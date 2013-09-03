@@ -17,7 +17,12 @@ struct ConnectionRes {
  1: string Socket,
 }
 
+struct RegisterRes {
+ 1: string Socket,
+ 2: Common.DNA DNA,
+}
+
 service local_rpc {
-  Common.DNA RegisterModule(1:Module m),
+  RegisterRes RegisterModule(1:Module m),
   ConnectionRes RequestConnection(1:ConnectionReq m),
 }

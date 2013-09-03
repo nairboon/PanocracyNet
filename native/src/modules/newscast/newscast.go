@@ -21,9 +21,13 @@ my.state.UPDATE(n.state);
 import (
 	//ae "github.com/nairboon/anevonet/lib"
 	"Common"
+	"fmt"
+	"github.com/samuel/go-thrift/thrift"
 	ae "libanevonet"
 	"log"
 	"math/rand"
+	"net"
+	"net/rpc"
 	proto "newscast_protocol"
 	"sync"
 	"time"
@@ -61,14 +65,33 @@ func (n *Newscast) ActiveThread() {
 			panic(err)
 		}
 		n.UpdateState(recstate)
-
 		time.Sleep(time.Duration(n.DNA["sleep"]) * time.Millisecond)
-
 	}
 
 }
 
-func (n *Newscast) PassiveThread() {
+func (n *Newscast) ExchangeState(state *proto.PeerState) (*proto.PeerState, error) {
+
+	return n.State, nil
+}
+
+func (n *Newscast) PassiveThread(socket string) {
+
+	rpc.RegisterName("Thrift", &proto.NewscastServer{n})
+
+	ln, err := net.Listen("unix", socket)
+	if err != nil {
+		panic(err)
+	}
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			fmt.Printf("ERROR: %+v\n", err)
+			continue
+		}
+		fmt.Printf("New connection %+v\n", conn)
+		go rpc.ServeCodec(thrift.NewServerCodec(thrift.NewFramedReadWriteCloser(conn, 0), thrift.NewBinaryProtocol(true, false)))
+	}
 
 }
 
@@ -77,9 +100,11 @@ func main() {
 
 	nc := Newscast{}
 	nc.Con = ae.NewConnection()
-	nc.Con.Register("Newscast", proto.RootDNA, nc.DNA)
+	socket := nc.Con.Register("Newscast", proto.RootDNA, nc.DNA)
 	nc.State = &proto.PeerState{}
 
+	go nc.PassiveThread(socket)
+	go nc.ActiveThread()
 	/* connect to daemon
 	   register protocol
 	   name, dna

@@ -104,10 +104,11 @@ func (a *AnEvoConnection) GetPeerConnection(p *Common.Peer) RPCClient {
 	return client
 }
 
-func (*AnEvoConnection) Register(name string, rootdna Common.DNA, dna Common.DNA) {
+func (*AnEvoConnection) Register(name string, rootdna Common.DNA, dna Common.DNA) string {
 
 	// check db for better dna
 	dna = rootdna
+	return "SOCKETFILE"
 }
 
 func NewConnection() *AnEvoConnection {

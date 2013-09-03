@@ -1,4 +1,5 @@
 package main
+
 /* Newscast Algorithm according to "Tag-Based Cooperation in Peer-to-Peer Networks with Newscast" (2005)
 
 ACTIVE THREAD
@@ -17,65 +18,77 @@ SENDSTATE(n.state.sender);
 my.state.UPDATE(n.state);
 */
 
-
 import (
- //ae "github.com/nairboon/anevonet/lib"
-ae "libanevonet"
-"log"
-"time"
- "Common"
-"math/rand"
-proto "newscast_protocol"
+	//ae "github.com/nairboon/anevonet/lib"
+	"Common"
+	ae "libanevonet"
+	"log"
+	"math/rand"
+	proto "newscast_protocol"
+	"sync"
+	"time"
 )
 
-
-/*func updateState(mystate, newstate proto.PeerState) proto.PeerState {
-// check if we need more peers
-if len(mystate.NewsItems) < dna["cachesize"] {
-	// we should 
+type Newscast struct {
+	mu    sync.Mutex
+	State *proto.PeerState
+	Con   *ae.AnEvoConnection
+	DNA   Common.DNA
 }
 
-}*/
+func (n *Newscast) UpdateState(newstate *proto.PeerState) proto.PeerState {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	// check if we need more peers
+	if len(n.State.NewsItems) < int(n.DNA["cachesize"]) {
+		// we should
+	}
+
+	return *newstate
+}
+
+func (n *Newscast) ActiveThread() {
+	r := rand.New(rand.NewSource(99))
+	for n.Con.ContinueRunning(n.DNA) {
+
+		// select Peer
+		peer := n.State.NewsItems[r.Intn(len(n.State.NewsItems))].Agent
+		pc := proto.NewscastClient{n.Con.GetPeerConnection(peer)}
+
+		recstate, err := pc.ExchangeState(n.State)
+		if err != nil {
+			panic(err)
+		}
+		n.UpdateState(recstate)
+
+		time.Sleep(time.Duration(n.DNA["sleep"]) * time.Millisecond)
+
+	}
+
+}
+
+func (n *Newscast) PassiveThread() {
+
+}
 
 func main() {
 	log.Printf("newscasting")
-r := rand.New(rand.NewSource(99))
 
-con := ae.NewConnection()
+	nc := Newscast{}
+	nc.Con = ae.NewConnection()
+	nc.Con.Register("Newscast", proto.RootDNA, nc.DNA)
+	nc.State = &proto.PeerState{}
 
-var dna Common.DNA
-con.Register("Newscast", proto.RootDNA, dna)
+	/* connect to daemon
+	   register protocol
+	   name, dna
+	   setup handlers
 
-mystate := &proto.PeerState{}
-for con.ContinueRunning(dna) {
-
-// select Peer
- peer := mystate.NewsItems[r.Intn( len(mystate.NewsItems))].Agent
- pc := proto.NewscastClient{con.GetPeerConnection(peer)}
-
-
-
-
-recstate, err := pc.ExchangeState(mystate)
-	if err != nil {
-		panic(err)
-	}
-
-
-		time.Sleep( time.Duration(dna["sleep"]) * time.Millisecond)
-
-
-
-}
-  /* connect to daemon
-   register protocol
-   name, dna 
-   setup handlers
- 
- 	for 
-	DNA change
-	incoming msg
-   start out msg loop
-*/
+	 	for
+		DNA change
+		incoming msg
+	   start out msg loop
+	*/
 
 }

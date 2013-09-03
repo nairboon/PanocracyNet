@@ -1,12 +1,10 @@
 package main
 
 import (
+	"fmt"
 	flag "github.com/ogier/pflag"
-"fmt"
 	"log"
-
 )
-
 
 type APICallChannel chan string
 
@@ -17,16 +15,16 @@ func main() {
 	flag.Parse()
 
 	log.Printf("staring daemon on %d\n", port)
-// declare channels
-//api_calls := make(APICallChannel, 5)
+	// declare channels
+	//api_calls := make(APICallChannel, 5)
 
-// read config file
-// open database
+	// read config file
+	// open database
 
-// start evolver
-// start external listener
-// start connection manager
-// start internal broker
+	// start evolver
+	// start external listener
+	// start connection manager
+	// start internal broker
 
 	fmt.Printf("stopping anevonet daemon\n")
 }

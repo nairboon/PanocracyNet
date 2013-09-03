@@ -29,13 +29,13 @@ proto "newscast_protocol"
 )
 
 
-func updateState(mystate, newstate proto.PeerState) proto.PeerState {
+/*func updateState(mystate, newstate proto.PeerState) proto.PeerState {
 // check if we need more peers
 if len(mystate.NewsItems) < dna["cachesize"] {
 	// we should 
 }
 
-}
+}*/
 
 func main() {
 	log.Printf("newscasting")
@@ -50,11 +50,16 @@ mystate := &proto.PeerState{}
 for con.ContinueRunning(dna) {
 
 // select Peer
- peer := mystate.NewsItems[r.Int31n( len(mystate.NewsItems))].Agent
- pc := con.GetPeerConnection(peer)
+ peer := mystate.NewsItems[r.Intn( len(mystate.NewsItems))].Agent
+ pc := proto.NewscastClient{con.GetPeerConnection(peer)}
 
-recstate := pc.ExchangeState(mystate)
 
+
+
+recstate, err := pc.ExchangeState(mystate)
+	if err != nil {
+		panic(err)
+	}
 
 
 		time.Sleep( time.Duration(dna["sleep"]) * time.Millisecond)

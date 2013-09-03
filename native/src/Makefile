@@ -19,12 +19,15 @@ protocol:
 daemon:
 	mkdir -p ../bin
 	gd daemon -o ../bin/daemon
+	cd daemon && go fmt
 
 launcher: 
 	gd launcher -o ../bin/launcher
+	cd launcher && go fmt
 
 library:
 	gd -I protocol libanevonet/
+	cd libanevonet && go fmt
 
 modules:
 	mkdir -p ../bin/modules

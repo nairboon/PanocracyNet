@@ -9,6 +9,7 @@ import (
 "io"
 	zmq "github.com/vaughan0/go-zmq"
 	"github.com/samuel/go-thrift/thrift"
+	"net"
 )
 
 /* zeromq connection */
@@ -85,14 +86,28 @@ func (*AnEvoConnection) ContinueRunning(dna Common.DNA) bool{
  return true
 }
 
+
 func (a *AnEvoConnection) GetPeerConnection(p Common.Peer) RPCClient {
- 
+// are we already connected to that peer?
+if val,ok := a.Connections[p]; ok {
+    return val
+}
+
+// make a new connection
  r,err  := a.Rpc.RequestConnection(&rpc.ConnectionReq{Target: &p})
 if err != nil {
 		panic(err)
 	}
 
- //return 0
+conn, err := net.Dial("unix", r.Socket)
+	if err != nil {
+		panic(err)
+	}
+
+	client := thrift.NewClient(thrift.NewFramedReadWriteCloser(conn, 0), thrift.NewBinaryProtocol(true, false), false)
+	
+
+ return client
 }
 
 func (*AnEvoConnection) Register(name string, rootdna Common.DNA, dna Common.DNA){

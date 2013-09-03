@@ -17,5 +17,5 @@ struct PeerState {
 }
 
 service newscast {
-  PeerState sendstate(1:PeerState s)
+  PeerState ExchangeState(1:PeerState s)
 }

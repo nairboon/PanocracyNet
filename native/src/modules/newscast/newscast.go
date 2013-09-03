@@ -24,13 +24,22 @@ ae "libanevonet"
 "log"
 "time"
  "Common"
+"math/rand"
 proto "newscast_protocol"
 )
 
 
+func updateState(mystate, newstate proto.PeerState) proto.PeerState {
+// check if we need more peers
+if len(mystate.NewsItems) < dna["cachesize"] {
+	// we should 
+}
+
+}
 
 func main() {
 	log.Printf("newscasting")
+r := rand.New(rand.NewSource(99))
 
 con := ae.NewConnection()
 
@@ -39,6 +48,15 @@ con.Register("Newscast", proto.RootDNA, dna)
 
 mystate := &proto.PeerState{}
 for con.ContinueRunning(dna) {
+
+// select Peer
+ peer := mystate.NewsItems[r.Int31n( len(mystate.NewsItems))].Agent
+ pc := con.GetPeerConnection(peer)
+
+recstate := pc.ExchangeState(mystate)
+
+
+
 		time.Sleep( time.Duration(dna["sleep"]) * time.Millisecond)
 
 

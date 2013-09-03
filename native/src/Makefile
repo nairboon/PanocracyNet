@@ -24,7 +24,7 @@ launcher:
 	gd launcher -o ../bin/launcher
 
 library:
-	gd -e -I protocol libanevonet/
+	gd -I protocol libanevonet/
 
 modules:
 	mkdir -p ../bin/modules

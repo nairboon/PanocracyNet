@@ -6,6 +6,7 @@ import (
 	flag "github.com/ogier/pflag"
 	"io/ioutil"
 	"log"
+	"os"
 	"os/exec"
 	"path"
 )
@@ -20,11 +21,13 @@ func main() {
 
 	log.Printf("staring daemon on %d\n", port)
 	portflag := fmt.Sprintf("--port=%d", port)
-	flags := fmt.Sprintf("--port=%d --dir=%s", port, dir)
+	dirflag := fmt.Sprintf("-dir=%s", dir)
 	filename, _ := osext.Executable()
 	wd := path.Dir(filename)
 
-	daemon := exec.Command(wd+"/daemon", flags)
+	daemon := exec.Command(wd+"/daemon", portflag, dirflag, "-log_dir='log'", "-alsologtostderr=true")
+	daemon.Stdout = os.Stdout
+	daemon.Stderr = os.Stderr
 	err := daemon.Start()
 	if err != nil {
 		log.Fatal(err)

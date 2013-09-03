@@ -1,9 +1,9 @@
 package main
 
 import (
-	"fmt"
-	flag "github.com/ogier/pflag"
-	"log"
+	log "github.com/golang/glog"
+	//flag //"github.com/ogier/pflag"
+	"flag"
 )
 
 type APICallChannel chan string
@@ -16,7 +16,7 @@ func main() {
 	flag.StringVar(&dir, "dir", "anevo", "working directory of anevonet")
 	flag.Parse()
 
-	log.Printf("staring daemon on %d in %s\n", port, dir)
+	log.Info("staring daemon on %d in %s\n", port, dir)
 	// declare channels
 	//api_calls := make(APICallChannel, 5)
 
@@ -28,5 +28,6 @@ func main() {
 	// start connection manager
 	// start internal broker
 
-	fmt.Printf("stopping anevonet daemon\n")
+	log.Info("stopping anevonet daemon\n")
+	log.Flush()
 }

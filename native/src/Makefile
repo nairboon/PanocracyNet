@@ -18,7 +18,7 @@ protocol:
 	gd protocol
 daemon:
 	mkdir -p ../bin
-	gd daemon -o ../bin/daemon
+	gd -I protocol daemon -o ../bin/daemon
 	cd daemon && go fmt
 
 launcher: 

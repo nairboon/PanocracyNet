@@ -1,12 +1,10 @@
-namespace js services
 namespace go anevonet_rpc
 
 include "Common.thrift"
 
 struct Module {
-  1: string name,
-  2: Common.DNA dna,
-  3: i32 passive_port
+  1: string Name,
+  2: Common.DNA DNA,
 }
 
 struct ConnectionReq {

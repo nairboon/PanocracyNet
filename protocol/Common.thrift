@@ -19,7 +19,8 @@ struct Gene {
 typedef map<string,i32> DNA
 
 struct Peer {
- 1: string ip
+ 1: string IP,
+ 2: i32 Port
 }
 
 struct Timestamp {

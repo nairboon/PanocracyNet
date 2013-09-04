@@ -7,8 +7,12 @@ import (
 	irpc "anevonet_rpc"
 	"errors"
 	"flag"
+	"fmt"
 	"github.com/lunny/xorm"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/samuel/go-thrift/thrift"
+	"net"
+	"net/rpc"
 	"path/filepath"
 )
 
@@ -18,10 +22,15 @@ type Module struct {
 	DNA    Common.DNA
 }
 
+type Connection struct {
+	// spawn new listener, channel into output manager
+	Socket string
+}
 type Anevonet struct {
-	Engine  *xorm.Engine
-	Modules map[string]*Module
-	Dir     string
+	Engine      *xorm.Engine
+	Modules     map[string]*Module
+	Connections map[*Common.Peer]*Connection
+	Dir         string
 }
 
 func (a *Anevonet) RegisterModule(module *irpc.Module) (*irpc.RegisterRes, error) {
@@ -30,11 +39,45 @@ func (a *Anevonet) RegisterModule(module *irpc.Module) (*irpc.RegisterRes, error
 	}
 
 	//TODO: fetch dna from db
-	m := &Module{Name: module.Name, DNA: module.DNA, Socket: a.Dir + "/sockets/" + module.Name}
+	m := &Module{Name: module.Name, DNA: module.DNA, Socket: a.Dir + "/sockets/modules/" + module.Name}
 	a.Modules[module.Name] = m
 
 	res := &irpc.RegisterRes{DNA: m.DNA, Socket: m.Socket}
 	return res, nil
+}
+
+func (a *Anevonet) RequestConnection(req *irpc.ConnectionReq) (*irpc.ConnectionRes, error) {
+	// check if we're already connected
+	if _, ok := a.Connections[req.Target]; ok {
+		return &irpc.ConnectionRes{Socket: a.Connections[req.Target].Socket}, nil
+	}
+
+	//TODO: fetch dna from db
+	s := &Connection{Socket: a.Dir + "/sockets/connections/" + fmt.Sprintf("%s-%d", req.Target.IP, req.Target.Port)}
+	a.Connections[req.Target] = s
+
+	res := &irpc.ConnectionRes{Socket: s.Socket}
+	return res, nil
+}
+
+func (a *Anevonet) InternalRPC(port int) {
+
+	rpc.RegisterName("Thrift", &irpc.InternalRpcServer{a})
+
+	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	if err != nil {
+		panic(err)
+	}
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			fmt.Printf("ERROR: %+v\n", err)
+			continue
+		}
+		fmt.Printf("New connection %+v\n", conn)
+		go rpc.ServeCodec(thrift.NewServerCodec(thrift.NewFramedReadWriteCloser(conn, 0), thrift.NewBinaryProtocol(true, false)))
+	}
+
 }
 
 var port int
@@ -56,6 +99,7 @@ func main() {
 		panic(err)
 	}
 
+	go a.InternalRPC(port)
 	// declare channels
 	//api_calls := make(APICallChannel, 5)
 

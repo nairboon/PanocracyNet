@@ -65,7 +65,7 @@ type RPCClient interface {
 type AnEvoConnection struct {
 	Client      client
 	Server      server
-	Rpc         rpc.LocalRpcClient
+	Rpc         rpc.InternalRpcClient
 	Connections map[*Common.Peer]RPCClient
 }
 
@@ -75,7 +75,7 @@ func (a *AnEvoConnection) Connect(port int) {
 
 	client := thrift.NewClient(thrift.NewFramedReadWriteCloser(a.Client.zmq, 0), thrift.NewBinaryProtocol(true, false), false)
 
-	a.Rpc = rpc.LocalRpcClient{client}
+	a.Rpc = rpc.InternalRpcClient{client}
 }
 
 func (*AnEvoConnection) ContinueRunning(dna Common.DNA) bool {

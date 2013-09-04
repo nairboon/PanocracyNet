@@ -8,7 +8,7 @@ struct Module {
 }
 
 struct ConnectionReq {
- 1: Common.Peer target,
+ 1: Common.Peer Target,
 }
 
 struct ConnectionRes {
@@ -20,7 +20,7 @@ struct RegisterRes {
  2: Common.DNA DNA,
 }
 
-service local_rpc {
+service InternalRpc {
   RegisterRes RegisterModule(1:Module m),
   ConnectionRes RequestConnection(1:ConnectionReq m),
 }

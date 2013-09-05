@@ -27,7 +27,9 @@ launcher:
 	cd launcher && go fmt
 
 library:
-	gd -I protocol libanevonet/
+	gd libzmqthrift/
+	cd libzmqthrift && go fmt
+	gd -I protocol -I libzmqthrift libanevonet/
 	cd libanevonet && go fmt
 
 modules:

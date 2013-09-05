@@ -60,6 +60,7 @@ import (
 	zmq "libzmqthrift"
 	"net/rpc"
 	"os"
+	"os/signal"
 	"path/filepath"
 )
 
@@ -171,7 +172,7 @@ func main() {
 	flag.StringVar(&dir, "dir", "anevo", "working directory of anevonet")
 	flag.Parse()
 
-	log.Info("staring daemon on %d in %s\n", port, dir)
+	log.Infof("staring daemon on %d in %s\n", port, dir)
 
 	d, _ := filepath.Abs(dir)
 	a := Anevonet{Dir: d}
@@ -193,6 +194,14 @@ func main() {
 	// start external listener
 	// start connection manager
 	// start internal broker
+
+	// wait for SIGINT
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+
+	for _ = range c {
+		break
+	}
 
 	log.Info("stopping anevonet daemon\n")
 	log.Flush()

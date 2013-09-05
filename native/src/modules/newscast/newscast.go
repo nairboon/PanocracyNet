@@ -29,6 +29,8 @@ import (
 	"net"
 	"net/rpc"
 	proto "newscast_protocol"
+	"os"
+	"os/signal"
 	"sync"
 	"time"
 )
@@ -115,5 +117,12 @@ func main() {
 		incoming msg
 	   start out msg loop
 	*/
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
 
+	for _ = range c {
+		break
+	}
+
+	fmt.Println("stopping anevonet daemon\n")
 }

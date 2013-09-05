@@ -51,8 +51,13 @@ func NewZMQConnection(port int, t zmq.SocketType) *ZmqConnection {
 	if err != nil {
 		panic(err)
 	}
+	if t == Server {
+		err = c.Sock.Bind(fmt.Sprintf("tcp://*:%d", port))
+	} else {
+		err = c.Sock.Connect(fmt.Sprintf("tcp://localhost:%d", port))
+	}
 
-	if err = c.Sock.Bind(fmt.Sprintf("tcp://*:%d", port)); err != nil {
+	if err != nil {
 		panic(err)
 	}
 	c.Chans = c.Sock.Channels()

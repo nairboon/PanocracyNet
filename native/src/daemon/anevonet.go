@@ -1,5 +1,38 @@
 package main
 
+/*
+AnEvoNet daemon
+
+responsible for connecting with remote peers and exchanging data, broker for modules
+
+1. listen on zeromq for modules
+1.1 modules can register
+1.2 modules can shutdown
+
+2. broker messages for modules
+2.1 modules can request to talk with a remotepeer
+2.1.2 daemon connects with remotepeer
+2.1.3 daemon creates local socket designated to communicate with this peer
+2.1.4 daemon sends socket to module
+
+2.2 modules listen for remotepeers
+2.2.1 daemon registers the socket where the module is listening
+2.2.2 daemon pipes data from remotepeers to that socket
+
+
+3. connects to remote peers
+3.1 TODO: NATS
+3.2 TODO: firewalls
+
+
+4. evolves modules and stratgies
+4.1 keeps statistics for every module
+4.2 randomly mutates dna
+4.3 exchanges dna with other peers
+4.4 adapts strategy
+4.4.1 if new strategy does not perform better, revert
+
+*/
 import (
 	log "github.com/golang/glog"
 	//flag //"github.com/ogier/pflag"
@@ -22,15 +55,28 @@ type Module struct {
 	DNA    Common.DNA
 }
 
-type Connection struct {
+type LocalConnection struct {
 	// spawn new listener, channel into output manager
 	Socket string
+	Target *Common.Peer
+	Out    *OutboundDataChannel
 }
+
+func (c *LocalConnection) Listen() {
+
+}
+
+type OutboundData struct {
+}
+
+type OutboundDataChannel chan OutboundData
+
 type Anevonet struct {
 	Engine      *xorm.Engine
 	Modules     map[string]*Module
-	Connections map[*Common.Peer]*Connection
+	Connections map[*Common.Peer]*LocalConnection
 	Dir         string
+	Outbound    OutboundDataChannel
 }
 
 func (a *Anevonet) RegisterModule(module *irpc.Module) (*irpc.RegisterRes, error) {
@@ -53,8 +99,10 @@ func (a *Anevonet) RequestConnection(req *irpc.ConnectionReq) (*irpc.ConnectionR
 	}
 
 	//TODO: fetch dna from db
-	s := &Connection{Socket: a.Dir + "/sockets/connections/" + fmt.Sprintf("%s-%d", req.Target.IP, req.Target.Port)}
+	s := &LocalConnection{Target: req.Target, Socket: a.Dir + "/sockets/connections/" + fmt.Sprintf("%s-%d", req.Target.IP, req.Target.Port)}
 	a.Connections[req.Target] = s
+	s.Out = &a.Outbound
+	go s.Listen()
 
 	res := &irpc.ConnectionRes{Socket: s.Socket}
 	return res, nil

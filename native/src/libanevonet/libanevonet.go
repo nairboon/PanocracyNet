@@ -36,8 +36,13 @@ func (a *AnEvoConnection) Connect(port int) {
 	a.Rpc = rpc.InternalRpcClient{client}
 }
 
-func (*AnEvoConnection) ContinueRunning(dna Common.DNA) bool {
+func (*AnEvoConnection) ContinueRunning(dna Common.P2PDNA) bool {
 	return true
+}
+
+func (*AnEvoConnection) Bootstrap() []*Common.Peer {
+	var peers []*Common.Peer
+	return peers
 }
 
 func (a *AnEvoConnection) GetPeerConnection(p *Common.Peer) zmq.RPCClient {
@@ -62,11 +67,15 @@ func (a *AnEvoConnection) GetPeerConnection(p *Common.Peer) zmq.RPCClient {
 	return client
 }
 
-func (*AnEvoConnection) Register(name string, rootdna Common.DNA, dna Common.DNA) string {
+func (a *AnEvoConnection) Register(name string, rootdna Common.P2PDNA, dna *Common.P2PDNA) string {
 
+	r, err := a.Rpc.RegisterModule(&rpc.Module{Name: name, DNA: &rootdna})
+	if err != nil {
+		panic(err)
+	}
 	// check db for better dna
-	dna = rootdna
-	return "SOCKETFILE"
+	dna = r.DNA
+	return r.Socket
 }
 
 func NewConnection() *AnEvoConnection {

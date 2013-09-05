@@ -16,7 +16,7 @@ struct Gene {
   1: i32 value
 }
 
-typedef map<string,i32> DNA
+typedef map<string,i32> P2PDNA
 
 struct Peer {
  1: string ID,

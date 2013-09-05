@@ -39,7 +39,7 @@ type Newscast struct {
 	mu    sync.Mutex
 	State *proto.PeerState
 	Con   *ae.AnEvoConnection
-	DNA   Common.DNA
+	DNA   Common.P2PDNA
 }
 
 func (n *Newscast) UpdateState(newstate *proto.PeerState) proto.PeerState {
@@ -57,7 +57,14 @@ func (n *Newscast) UpdateState(newstate *proto.PeerState) proto.PeerState {
 func (n *Newscast) ActiveThread() {
 	r := rand.New(rand.NewSource(99))
 	for n.Con.ContinueRunning(n.DNA) {
-
+		if len(n.State.NewsItems) < 1 {
+			log.Printf("we have 0 peers in cache")
+			// we have no peers at all!
+			for p := range n.Con.Bootstrap() {
+				fmt.Printf("New peer %+v\n", p)
+			}
+			continue
+		}
 		// select Peer
 		peer := n.State.NewsItems[r.Intn(len(n.State.NewsItems))].Agent
 		pc := proto.NewscastClient{n.Con.GetPeerConnection(peer)}
@@ -102,10 +109,12 @@ func main() {
 
 	nc := Newscast{}
 	nc.Con = ae.NewConnection()
-	socket := nc.Con.Register("Newscast", proto.RootDNA, nc.DNA)
+	socket := nc.Con.Register("Newscast", proto.RootDNA, &nc.DNA)
 	nc.State = &proto.PeerState{}
 
-	go nc.PassiveThread(socket)
+	_ = socket
+	//go nc.PassiveThread(socket)
+	log.Printf("starting active thread")
 	go nc.ActiveThread()
 	/* connect to daemon
 	   register protocol
@@ -124,5 +133,5 @@ func main() {
 		break
 	}
 
-	fmt.Println("stopping anevonet daemon\n")
+	fmt.Println("stopping newscast")
 }

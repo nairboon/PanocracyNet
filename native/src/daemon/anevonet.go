@@ -57,7 +57,7 @@ import (
 	"github.com/lunny/xorm"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/samuel/go-thrift/thrift"
-	"net"
+	zmq "libzmqthrift"
 	"net/rpc"
 	"os"
 	"path/filepath"
@@ -136,19 +136,30 @@ func (a *Anevonet) InternalRPC(port int) {
 
 	rpc.RegisterName("Thrift", &irpc.InternalRpcServer{a})
 
-	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
-	if err != nil {
-		panic(err)
+	c := zmq.NewZMQConnection(port, zmq.Server)
+	/*for {
+	  select {
+	  case msg := <-c.Chans.In():
+	    go func() {
+			fmt.Printf("New connection %+v\n", msg)
+	      //resp := doSomething(msg)
+	      //chans.Out() <- resp*/
+	rpc.ServeCodec(thrift.NewServerCodec(thrift.NewFramedReadWriteCloser(c, 0), thrift.NewBinaryProtocol(true, false)))
+	/* }()
+	  case err := <-chans.Errors():
+				fmt.Printf("ERROR: %+v\n", err)
+	    panic(err)
+	  }
 	}
-	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			fmt.Printf("ERROR: %+v\n", err)
-			continue
-		}
-		fmt.Printf("New connection %+v\n", conn)
-		go rpc.ServeCodec(thrift.NewServerCodec(thrift.NewFramedReadWriteCloser(conn, 0), thrift.NewBinaryProtocol(true, false)))
-	}
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+
+				continue
+			}
+
+
+		}*/
 
 }
 

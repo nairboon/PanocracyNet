@@ -1,7 +1,7 @@
 
 #GOPATH := $(CURDIR)
 
-all: protocol daemon launcher library modules
+all: protocol library daemon launcher modules
 
 protocol: 
 	mkdir -p protocol
@@ -19,7 +19,7 @@ protocol:
 	gd protocol
 daemon:
 	mkdir -p ../bin
-	gd -I protocol daemon -o ../bin/daemon
+	gd -I protocol -I libzmqthrift daemon -o ../bin/daemon
 	cd daemon && go fmt
 
 launcher: 

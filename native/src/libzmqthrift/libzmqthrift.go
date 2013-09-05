@@ -11,6 +11,11 @@ type RPCClient interface {
 	Call(method string, request interface{}, response interface{}) error
 }
 
+const (
+	Client zmq.SocketType = zmq.Req
+	Server                = zmq.Rep
+)
+
 /* zeromq connection */
 type ZmqConnection struct {
 	Ctx   *zmq.Context
@@ -21,33 +26,36 @@ type ZmqConnection struct {
 	*chanWriter
 }
 
+func (z *ZmqConnection) Close() error {
+	z.Ctx.Close()
+	z.Sock.Close()
+	z.Chans.Close()
+	return nil
+}
+
 func (z *ZmqConnection) NewThriftClient() RPCClient {
 	client := thrift.NewClient(thrift.NewFramedReadWriteCloser(z, 0), thrift.NewBinaryProtocol(true, false), false)
 
 	return client
 }
 
-func NewZMQConnection(port int) *ZmqConnection {
+func NewZMQConnection(port int, t zmq.SocketType) *ZmqConnection {
 	c := &ZmqConnection{}
 	var err error
 	c.Ctx, err = zmq.NewContext()
 	if err != nil {
 		panic(err)
 	}
-	defer c.Ctx.Close()
 
-	c.Sock, err = c.Ctx.Socket(zmq.Rep)
+	c.Sock, err = c.Ctx.Socket(t)
 	if err != nil {
 		panic(err)
 	}
-	defer c.Sock.Close()
 
 	if err = c.Sock.Bind(fmt.Sprintf("tcp://*:%d", port)); err != nil {
 		panic(err)
 	}
 	c.Chans = c.Sock.Channels()
-	defer c.Chans.Close()
-
 	c.chanReader = newChanReader(c.Chans.In())
 
 	return c

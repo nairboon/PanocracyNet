@@ -29,9 +29,9 @@ type AnEvoConnection struct {
 
 func (a *AnEvoConnection) Connect(port int) {
 	log.Printf("Connecting on: %d", port)
-	a.Client.Zmq = zmq.NewZMQConnection(port)
+	a.Client.Zmq = zmq.NewZMQConnection(port, zmq.Client)
 
-	client := thrift.NewClient(thrift.NewFramedReadWriteCloser(a.Client.Zmq, 0), thrift.NewBinaryProtocol(true, false), false)
+	client := a.Client.Zmq.NewThriftClient()
 
 	a.Rpc = rpc.InternalRpcClient{client}
 }

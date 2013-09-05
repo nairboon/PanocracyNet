@@ -8,6 +8,7 @@ protocol:
 	rm -f protocol/p2p_meta.go
 	rm -f protocol/anevonet_rpc.go
 	rm -f protocol/Common.go
+	rm -f protocol/anevonet_rpc.go_
 	generator ../../protocol/p2p_meta.thrift protocol/p2p_meta.go
 	generator -go.import Common ../../protocol/anevonet_rpc.thrift protocol/anevonet_rpc.go_
 	sed 's/*Peer/*Common.Peer/' protocol/anevonet_rpc.go_ > protocol/anevonet_rpc.go

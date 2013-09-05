@@ -32,6 +32,19 @@ responsible for connecting with remote peers and exchanging data, broker for mod
 4.4 adapts strategy
 4.4.1 if new strategy does not perform better, revert
 
+
+5. out-of-time delivery of messages
+5.1 store failed messages and retransmit on peer-up
+
+#####
+stored int daemon db
+
+1. module statistics
+2. known peers
+2.1 lookup table of URIs for peers
+3. out-of-connection delivery for messages
+4. peer statistics i.e: who delivers out of connections msgs
+
 */
 import (
 	log "github.com/golang/glog"
@@ -46,6 +59,7 @@ import (
 	"github.com/samuel/go-thrift/thrift"
 	"net"
 	"net/rpc"
+	"os"
 	"path/filepath"
 )
 
@@ -85,6 +99,7 @@ func (a *Anevonet) RegisterModule(module *irpc.Module) (*irpc.RegisterRes, error
 	}
 
 	//TODO: fetch dna from db
+
 	m := &Module{Name: module.Name, DNA: module.DNA, Socket: a.Dir + "/sockets/modules/" + module.Name}
 	a.Modules[module.Name] = m
 
@@ -98,14 +113,23 @@ func (a *Anevonet) RequestConnection(req *irpc.ConnectionReq) (*irpc.ConnectionR
 		return &irpc.ConnectionRes{Socket: a.Connections[req.Target].Socket}, nil
 	}
 
-	//TODO: fetch dna from db
-	s := &LocalConnection{Target: req.Target, Socket: a.Dir + "/sockets/connections/" + fmt.Sprintf("%s-%d", req.Target.IP, req.Target.Port)}
+	basepath := a.Dir + "/sockets/" + req.Module + "/connections/"
+	err := os.MkdirAll(basepath, 0655)
+	if err != nil {
+		log.Fatal(err)
+	}
+	s := &LocalConnection{Target: req.Target, Socket: basepath + fmt.Sprintf("%s-%d", req.Target.IP, req.Target.Port)}
 	a.Connections[req.Target] = s
 	s.Out = &a.Outbound
 	go s.Listen()
 
 	res := &irpc.ConnectionRes{Socket: s.Socket}
 	return res, nil
+}
+
+func (a *Anevonet) ShutdownConnection(req *irpc.ConnectionRes) error {
+	return nil
+
 }
 
 func (a *Anevonet) InternalRPC(port int) {

@@ -9,6 +9,7 @@ struct Module {
 
 struct ConnectionReq {
  1: Common.Peer Target,
+ 2: string Module
 }
 
 struct ConnectionRes {
@@ -22,5 +23,6 @@ struct RegisterRes {
 
 service InternalRpc {
   RegisterRes RegisterModule(1:Module m),
-  ConnectionRes RequestConnection(1:ConnectionReq m),
+  ConnectionRes RequestConnection(1:ConnectionReq req),
+  void ShutdownConnection(1:ConnectionRes req)
 }

@@ -63,6 +63,10 @@ func (n *Newscast) ActiveThread() {
 			for p := range n.Con.Bootstrap() {
 				fmt.Printf("New peer %+v\n", p)
 			}
+			// still no peers
+			if len(n.State.NewsItems) < 1 {
+				time.Sleep(2000 * time.Millisecond)
+			}
 			continue
 		}
 		// select Peer

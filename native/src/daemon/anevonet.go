@@ -56,7 +56,8 @@ import (
 	"fmt"
 	"github.com/lunny/xorm"
 	_ "github.com/mattn/go-sqlite3"
-	//"github.com/samuel/go-thrift/thrift"
+	zmq3 "github.com/pebbe/zmq3"
+	"github.com/samuel/go-thrift/thrift"
 	zmq "libzmqthrift"
 	"net/rpc"
 	"os"
@@ -138,13 +139,70 @@ func (a *Anevonet) Bootstrap() (*irpc.BootstrapRes, error) {
 
 }
 
+func pop(msg []string) (head, tail []string) {
+	if msg[1] == "" {
+		head = msg[:2]
+		tail = msg[2:]
+	} else {
+		head = msg[:1]
+		tail = msg[1:]
+	}
+	return
+}
+
+// Each worker task works on one request at a time and sends a random number
+// of replies back, with random delays between replies:
+
+func (a *Anevonet) InternalRPCWorker() {
+
+	worker, _ := zmq3.NewSocket(zmq3.DEALER)
+	defer worker.Close()
+	worker.Connect("inproc://backend")
+
+	for {
+
+		// The DEALER socket gives us the reply envelope and message
+		msg, _ := worker.RecvMessage(0)
+
+		identity, content := pop(msg)
+		log.Infof("recv msg from %s: %s\n", identity, content)
+		r := zmq.ThriftZMQChannel{}
+		//c := make(chan []byte, 5)
+
+		//r.ChanWriter = zmq.NewChanWriter(c)
+		// drop first msg as it is framesize
+		//log.Infof("new reader with n: %d\n", len(content))
+		r.BufferReader = zmq.NewBufferReader(content)
+		r.BufferWriter = zmq.NewBufferWriter()
+		rpc.ServeRequest(thrift.NewServerCodec(zmq.NewFramedReadWriteCloser(r, 0), thrift.NewBinaryProtocol(true, false)))
+
+		res := r.BufferWriter.Buf.Bytes()
+		//log.Infof("sending back(%d): %s\n", len(res), res)
+		worker.SendMessage(identity, res)
+	}
+}
+
 func (a *Anevonet) InternalRPC(port int) {
 
 	rpc.RegisterName("Thrift", &irpc.InternalRpcServer{a})
 
-	c := zmq.NewZMQConnection(port, zmq.Server)
+	frontend := zmq.NewZMQConnection(port, zmq.Server)
 
-	for {
+	// Backend socket talks to workers over inproc
+	backend, _ := zmq3.NewSocket(zmq3.DEALER)
+	defer backend.Close()
+	backend.Bind("inproc://backend")
+
+	// Launch pool of worker threads, precise number is not critical
+	for i := 0; i < 5; i++ {
+		go a.InternalRPCWorker()
+	}
+
+	// Connect backend to frontend via a proxy
+	err := zmq3.Proxy(frontend.Sock, backend, nil)
+	log.Fatalln("Proxy interrupted:", err)
+
+	/*r {
 		select {
 		case msg := <-c.Chans.In():
 			go func() {
@@ -207,7 +265,8 @@ func main() {
 	log.Infof("staring daemon on %d in %s\n", port, dir)
 
 	d, _ := filepath.Abs(dir)
-	a := Anevonet{Dir: d}
+	a := Anevonet{Dir: d, Modules: make(map[string]*Module), Connections: make(map[*Common.Peer]*LocalConnection)}
+
 	engine, err := xorm.NewEngine("sqlite3", dir+"/anevonet.db")
 	defer engine.Close()
 	a.Engine = engine

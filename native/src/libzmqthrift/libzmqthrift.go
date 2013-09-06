@@ -12,8 +12,8 @@ type RPCClient interface {
 }
 
 const (
-	Client zmq.SocketType = zmq.Req
-	Server                = zmq.Rep
+	Client zmq.SocketType = zmq.Dealer
+	Server                = zmq.Router
 )
 
 /* zeromq connection */
@@ -23,19 +23,28 @@ type ZmqConnection struct {
 	Sock  *zmq.Socket
 
 	*chanReader
-	*chanWriter
+	*ChanWriter
 }
 
+type ThriftZMQChannel struct {
+	*BufferReader
+	*ChanWriter
+}
+
+func (t ThriftZMQChannel) Close() error {
+	//t.R.Close()
+	return nil
+} /*
 func (z *ZmqConnection) Close() error {
 	z.Ctx.Close()
 	z.Sock.Close()
 	z.Chans.Close()
 	return nil
-}
+}*/
 
 func (z *ZmqConnection) NewThriftClient() RPCClient {
-	client := thrift.NewClient(thrift.NewFramedReadWriteCloser(z, 0), thrift.NewBinaryProtocol(true, false), false)
-
+	client := thrift.NewClient(thrift.NewFramedReadWriteCloser(z, 0), thrift.NewBinaryProtocol(false, false), false)
+	//client := thrift.NewClient(z, thrift.NewBinaryProtocol(false, false), false)
 	return client
 }
 
@@ -60,8 +69,12 @@ func NewZMQConnection(port int, t zmq.SocketType) *ZmqConnection {
 	if err != nil {
 		panic(err)
 	}
-	c.Chans = c.Sock.Channels()
-	c.chanReader = newChanReader(c.Chans.In())
+	//if t == Client {
+	c.Chans = c.Sock.ChannelsBuffer(5)
+	c.chanReader = NewChanReader(c.Chans.In())
+	c.ChanWriter = NewChanWriter(c.Chans.Out())
+
+	//}
 
 	return c
 }
@@ -75,7 +88,7 @@ type chanReader struct {
 	c      <-chan [][]byte
 }
 
-func newChanReader(c <-chan [][]byte) *chanReader {
+func NewChanReader(c <-chan [][]byte) *chanReader {
 	return &chanReader{c: c}
 }
 
@@ -101,19 +114,44 @@ func (r *chanReader) Close() error {
 	return nil
 }
 
-// chanWriter writes on the channel when its
+// ChanWriter writes on the channel when its
 // Write method is called.
-type chanWriter struct {
+type ChanWriter struct {
 	c chan<- [][]byte
 }
 
-func newChanWriter(c chan<- [][]byte) *chanWriter {
-	return &chanWriter{c: c}
+func NewChanWriter(c chan<- [][]byte) *ChanWriter {
+	return &ChanWriter{c: c}
 }
-func (w *chanWriter) Write(buf []byte) (n int, err error) {
+func (w *ChanWriter) Write(buf []byte) (n int, err error) {
 	b := make([][]byte, 1)
 	b[0] = make([]byte, len(buf))
 	copy(b[0], buf)
 	w.c <- b
+	fmt.Printf("wrote to chan: %s", b)
+	//panic("jajsdj")
 	return len(buf), nil
+}
+
+// bufReader reads from buffer
+type BufferReader struct {
+	buf [][]byte
+	i   int
+}
+
+func NewBufferReader(c [][]byte) *BufferReader {
+	return &BufferReader{buf: c}
+}
+
+func (r *BufferReader) Read(buf []byte) (int, error) {
+	if len(r.buf) == r.i {
+		return 0, io.EOF
+	}
+	buf = r.buf[r.i]
+	r.i++
+	return len(buf), nil
+}
+
+func (r *BufferReader) Close() error {
+	return nil
 }

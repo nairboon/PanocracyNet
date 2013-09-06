@@ -56,7 +56,7 @@ import (
 	"fmt"
 	"github.com/lunny/xorm"
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/samuel/go-thrift/thrift"
+	//"github.com/samuel/go-thrift/thrift"
 	zmq "libzmqthrift"
 	"net/rpc"
 	"os"
@@ -67,7 +67,7 @@ import (
 type Module struct {
 	Name   string
 	Socket string
-	DNA    Common.DNA
+	DNA    *Common.P2PDNA
 }
 
 type LocalConnection struct {
@@ -133,26 +133,48 @@ func (a *Anevonet) ShutdownConnection(req *irpc.ConnectionRes) error {
 
 }
 
+func (a *Anevonet) Bootstrap() (*irpc.BootstrapRes, error) {
+	return &irpc.BootstrapRes{}, nil
+
+}
+
 func (a *Anevonet) InternalRPC(port int) {
 
 	rpc.RegisterName("Thrift", &irpc.InternalRpcServer{a})
 
 	c := zmq.NewZMQConnection(port, zmq.Server)
-	/*for {
-	  select {
-	  case msg := <-c.Chans.In():
-	    go func() {
-			fmt.Printf("New connection %+v\n", msg)
-	      //resp := doSomething(msg)
-	      //chans.Out() <- resp*/
-	rpc.ServeCodec(thrift.NewServerCodec(thrift.NewFramedReadWriteCloser(c, 0), thrift.NewBinaryProtocol(true, false)))
-	/* }()
-	  case err := <-chans.Errors():
-				fmt.Printf("ERROR: %+v\n", err)
-	    panic(err)
-	  }
+
+	for {
+		select {
+		case msg := <-c.Chans.In():
+			go func() {
+				fmt.Printf("New connection %s:%d\n", msg[0], len(msg))
+				nmsg := msg[2:]
+				if len(nmsg) < 3 {
+				// probably framesize package, dropp
+					fmt.Printf("drop",)
+					c.Chans.Out() <- ""
+					return
+				}
+				//resp := doSomething(msg)
+				r := zmq.ThriftZMQChannel{}
+				r.ChanWriter = zmq.NewChanWriter(c.Chans.Out())
+				// drop first msg as it is framesize
+
+
+				fmt.Printf("Msg %s:%d\n", nmsg[0], len(nmsg))
+				r.BufferReader = zmq.NewBufferReader(msg)
+				//rpc.ServeCodec(thrift.NewServerCodec(thrift.NewFramedReadWriteCloser(r, 0), thrift.NewBinaryProtocol(true, false)))
+				fmt.Printf("Never....")
+			}()
+			//c.Chans.Out() <- msg
+			fmt.Printf("Next...\n")
+		case err := <-c.Chans.Errors():
+			fmt.Printf("ERROR: %+v\n", err)
+			panic(err)
+		}
 	}
-		for {
+	/*for {
 			conn, err := ln.Accept()
 			if err != nil {
 
@@ -160,7 +182,17 @@ func (a *Anevonet) InternalRPC(port int) {
 			}
 
 
-		}*/
+	}*
+	for {
+		// Wait for next request from client
+		request, _, _ := c.Sock.RecvPart()
+		fmt.Printf("Received request: [%s]\n", string(request))
+
+		//go rpc.ServeCodec(thrift.NewServerCodec(thrift.NewFramedReadWriteCloser(c, 0), thrift.NewBinaryProtocol(true, false)))
+		// Send reply back to client
+
+		c.Sock.SendPart([]byte("World"), false)
+	}*/
 
 }
 

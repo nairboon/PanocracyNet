@@ -68,7 +68,7 @@ func (a *AnEvoConnection) GetPeerConnection(p *Common.Peer) zmq.RPCClient {
 }
 
 func (a *AnEvoConnection) Register(name string, rootdna Common.P2PDNA, dna *Common.P2PDNA) string {
-
+	log.Printf("Register Module: %s", name)
 	r, err := a.Rpc.RegisterModule(&rpc.Module{Name: name, DNA: &rootdna})
 	if err != nil {
 		panic(err)

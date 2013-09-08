@@ -42,7 +42,9 @@ func main() {
 	}
 
 	for _, m := range modulesDir {
-		c := exec.Command(wd+"/modules/"+m.Name(), portflag)
+		c := exec.Command(wd+"/modules/"+m.Name(), portflag, "-alsologtostderr=true")
+		c.Stdout = os.Stdout
+		c.Stderr = os.Stderr
 		err := c.Start()
 		if err != nil {
 			log.Fatal(err)

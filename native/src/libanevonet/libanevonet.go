@@ -3,10 +3,11 @@ package libanevonet
 import (
 	"Common"
 	rpc "anevonet_rpc"
-	flag "github.com/ogier/pflag"
+
+	"flag" //flag "github.com/ogier/pflag"
+	log "github.com/golang/glog"
 	"github.com/samuel/go-thrift/thrift"
 	zmq "libzmqthrift"
-	"log"
 	"net"
 )
 
@@ -21,6 +22,7 @@ type server struct {
 
 /* we abstract this and export an AnEvo Connection which is bidirectional */
 type AnEvoConnection struct {
+	Name        string
 	Client      client
 	Server      server
 	Rpc         rpc.InternalRpcClient
@@ -28,8 +30,8 @@ type AnEvoConnection struct {
 }
 
 func (a *AnEvoConnection) Connect(port int) {
-	log.Printf("Connecting on: %d", port)
-	a.Client.Zmq = zmq.NewZMQConnection(port, zmq.Client)
+	log.Infof("Connecting on: %d", port)
+	a.Client.Zmq = zmq.NewZMQConnection(a.Name, port, zmq.Client)
 
 	client := a.Client.Zmq.NewThriftClient()
 
@@ -67,8 +69,8 @@ func (a *AnEvoConnection) GetPeerConnection(p *Common.Peer) zmq.RPCClient {
 	return client
 }
 
-func (a *AnEvoConnection) Register(name string, rootdna Common.P2PDNA, dna *Common.P2PDNA) string {
-	log.Printf("Register Module: %s", name)
+func (a *AnEvoConnection) RegisterModule(name string, rootdna Common.P2PDNA, dna *Common.P2PDNA) string {
+	log.Infof("Register Module: %s", name)
 	r, err := a.Rpc.RegisterModule(&rpc.Module{Name: name, DNA: &rootdna})
 	if err != nil {
 		panic(err)
@@ -78,12 +80,12 @@ func (a *AnEvoConnection) Register(name string, rootdna Common.P2PDNA, dna *Comm
 	return r.Socket
 }
 
-func NewConnection() *AnEvoConnection {
+func NewConnection(name string) *AnEvoConnection {
 	c := &AnEvoConnection{}
 	var port int
 	flag.IntVar(&port, "port", 9000, "port of the daemon")
 	flag.Parse()
-
+	c.Name = name
 	c.Connect(port)
 
 	return c

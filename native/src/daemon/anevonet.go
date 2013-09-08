@@ -37,9 +37,6 @@ responsible for connecting with remote peers and exchanging data, broker for mod
 5.1 store failed messages and retransmit on peer-up
 
 
-6. local peer discovery with UDP broadcasts
-6.1 Broadcast this peer
-6.2 Listen for other broadcasts
 
 #####
 stored int daemon db
@@ -56,7 +53,6 @@ import (
 	//flag //"github.com/ogier/pflag"
 	"Common"
 	irpc "anevonet_rpc"
-	"bytes"
 	"errors"
 	"flag"
 	"fmt"
@@ -65,12 +61,11 @@ import (
 	zmq3 "github.com/pebbe/zmq3"
 	"github.com/samuel/go-thrift/thrift"
 	zmq "libzmqthrift"
-	"net"
+
 	"net/rpc"
 	"os"
 	"os/signal"
 	"path/filepath"
-	"time"
 )
 
 type Module struct {
@@ -96,12 +91,16 @@ type OutboundData struct {
 type OutboundDataChannel chan OutboundData
 
 type Anevonet struct {
-	Engine      *xorm.Engine
-	Modules     map[string]*Module
-	Connections map[*Common.Peer]*LocalConnection
-	Dir         string
-	Outbound    OutboundDataChannel
-	ID          Common.Peer
+	Engine   *xorm.Engine
+	Modules  map[string]*Module
+	Services map[string]*irpc.Service
+	// PeerConnection initiated through algorithms
+	Connections  map[*Common.Peer]*LocalConnection
+	OnlinePeers  []*Common.Peer
+	Dir          string
+	Outbound     OutboundDataChannel
+	ID           Common.Peer
+	Bootstrapped bool // true once we have atleast 1 connection
 }
 
 func (a *Anevonet) RegisterModule(module *irpc.Module) (*irpc.RegisterRes, error) {
@@ -118,7 +117,16 @@ func (a *Anevonet) RegisterModule(module *irpc.Module) (*irpc.RegisterRes, error
 	return res, nil
 }
 
+func (a *Anevonet) RegisterService(s *irpc.Service) (bool, error) {
+	if _, ok := a.Services[s.Name]; ok {
+		return false, errors.New("service already registered")
+	}
+	a.Services[s.Name] = s
+	return true, nil
+}
+
 func (a *Anevonet) RequestConnection(req *irpc.ConnectionReq) (*irpc.ConnectionRes, error) {
+	log.Infof("RequestConnection\n")
 	// check if we're already connected
 	if _, ok := a.Connections[req.Target]; ok {
 		return &irpc.ConnectionRes{Socket: a.Connections[req.Target].Socket}, nil
@@ -143,9 +151,20 @@ func (a *Anevonet) ShutdownConnection(req *irpc.ConnectionRes) error {
 
 }
 
-func (a *Anevonet) Bootstrap() (*irpc.BootstrapRes, error) {
-	return &irpc.BootstrapRes{}, nil
+func (a *Anevonet) Status() (*irpc.StatusRes, error) {
+	log.Infof("Status\n")
+	return &irpc.StatusRes{ID: &a.ID, OnlinePeers: int32(len(a.OnlinePeers))}, nil
+}
 
+func (a *Anevonet) BootstrapAlgorithm() (*irpc.BootstrapRes, error) {
+	log.Infof("BootstrapAlogrithm\n")
+	return &irpc.BootstrapRes{}, nil
+}
+
+func (a *Anevonet) BootstrapNetwork(peer *Common.Peer) (bool, error) {
+	log.Infof("BootstrapNetwork (%d)\n", peer.Port)
+
+	return false, nil
 }
 
 func pop(msg []string) (head, tail []string) {
@@ -169,12 +188,15 @@ func (a *Anevonet) InternalRPCWorker() {
 	worker.Connect("inproc://backend")
 
 	for {
-
+		//log.Info("waiting for data..")
 		// The DEALER socket gives us the reply envelope and message
 		msg, _ := worker.RecvMessage(0)
-
+		/*msg, err := worker.RecvMessage(zmq3.DONTWAIT)
+		if err != nil {
+		continue
+		}*/
 		identity, content := pop(msg)
-		log.Infof("recv msg from %s: %s\n", identity, content)
+		//log.Infof("recv msg from %s: %s\n", identity, content)
 		r := zmq.ThriftZMQChannel{}
 		//c := make(chan []byte, 5)
 
@@ -186,8 +208,9 @@ func (a *Anevonet) InternalRPCWorker() {
 		rpc.ServeRequest(thrift.NewServerCodec(zmq.NewFramedReadWriteCloser(r, 0), thrift.NewBinaryProtocol(true, false)))
 
 		res := r.BufferWriter.Buf.Bytes()
-		//log.Infof("sending back(%d): %s\n", len(res), res)
+		//log.Infof("sending back to (%s) (%d): %s\n", identity, len(res), res)
 		worker.SendMessage(identity, res)
+		//log.Info("done sending!!!")
 	}
 }
 
@@ -195,15 +218,15 @@ func (a *Anevonet) InternalRPC(port int) {
 
 	rpc.RegisterName("Thrift", &irpc.InternalRpcServer{a})
 
-	frontend := zmq.NewZMQConnection(port, zmq.Server)
+	frontend := zmq.NewZMQConnection("Daemon", port, zmq.Server)
 
 	// Backend socket talks to workers over inproc
 	backend, _ := zmq3.NewSocket(zmq3.DEALER)
 	defer backend.Close()
 	backend.Bind("inproc://backend")
 
-	// Launch pool of worker threaCommon.Peerds, precise number is not critical
-	for i := 0; i < 5; i++ {
+	// Launch pool of worker threads, precise number is not critical
+	for i := 0; i < 2; i++ {
 		go a.InternalRPCWorker()
 	}
 
@@ -217,75 +240,8 @@ func (a *Anevonet) AddNewPeer(peer *Common.Peer) {
 	log.Infoln("New Peer!", peer.Port)
 }
 
-func (a *Anevonet) LocalPeerDiscovery(port int) {
-	// 6.1 Broadcast us
-	go func() {
-		c, err := net.ListenPacket("udp", ":0")
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer c.Close()
-		fmt.Println("Broadcasting this Peer...")
-		for {
-
-			dst, err := net.ResolveUDPAddr("udp", "255.255.255.255:8032")
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			buf := &bytes.Buffer{}
-
-			err = thrift.EncodeStruct(buf, thrift.NewBinaryProtocol(true, false), a.ID)
-			if err != nil {
-				log.Fatal(err)
-			}
-			if _, err := c.WriteTo(buf.Bytes(), dst); err != nil {
-				log.Fatal(err)
-			}
-			time.Sleep(1000 * time.Millisecond)
-		}
-	}()
-
-	// 6.2 Listen for Broadcasts
-	addr := &net.UDPAddr{Port: 8032, IP: net.IPv4bcast}
-	c, err := net.ListenUDP("udp4", addr)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	defer c.Close()
-	fmt.Println("Llisten for Broadcast...")
-	for {
-
-		b := make([]byte, 512)
-		n, _, err := c.ReadFrom(b)
-		if err != nil {
-			log.Fatal(err)
-		}
-		b = b[:n]
-		//log.Infoln(n, "bytes read from", peer)
-		//log.Infoln(b)
-		res := &Common.Peer{}
-		buf := bytes.NewBuffer(b)
-		err = thrift.DecodeStruct(buf, thrift.NewBinaryProtocol(true, false), res)
-		if err != nil {
-			log.Fatal(err)
-		}
-		if res.Port == a.ID.Port {
-			//log.Infoln("its us ...")
-		} else {
-
-			a.AddNewPeer(res)
-		}
-		time.Sleep(1000 * time.Millisecond)
-	}
-
-}
-
 var port int
 var dir string
-var discoveryUDPPort = 8032
 
 func main() {
 	flag.IntVar(&port, "port", 9000, "the port to start an instance of anevonet")
@@ -304,10 +260,7 @@ func main() {
 		panic(err)
 	}
 
-	go a.LocalPeerDiscovery(discoveryUDPPort)
 	go a.InternalRPC(port)
-	// declare channels
-	//api_calls := make(APICallChannel, 5)
 
 	// read config file
 	// open database

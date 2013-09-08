@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	log "github.com/golang/glog"
 	zmq "github.com/pebbe/zmq3"
 	"github.com/samuel/go-thrift/thrift"
 	"io"
@@ -31,6 +32,7 @@ type ZmqConnection struct {
 }
 
 func (z *ZmqConnection) Read(buf []byte) (int, error) {
+	//fmt.Println("zmq.READ")
 	for {
 
 		z.mu.Lock()
@@ -38,7 +40,7 @@ func (z *ZmqConnection) Read(buf []byte) (int, error) {
 
 		if err == nil {
 			//id, _ := z.Sock.GetIdentity()
-			//fmt.Printf("recieved %d parts: %s", len(msg), msg[0])
+			//fmt.Printf("%s, recieved %d parts: %s", id, len(msg), msg[0])
 			for _, part := range msg {
 				z.readbuf.WriteString(part)
 			}
@@ -52,6 +54,7 @@ func (z *ZmqConnection) Read(buf []byte) (int, error) {
 			z.mu.Unlock()
 			return n, e
 		}
+
 		z.mu.Unlock()
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -73,6 +76,7 @@ func (z *ZmqConnection) Send() {
 }
 
 func (z *ZmqConnection) Close() error {
+	fmt.Println("zmq.CLOSE")
 	return nil
 }
 
@@ -99,7 +103,7 @@ func (z *ZmqConnection) NewThriftClient() RPCClient {
 	return client
 }
 
-func NewZMQConnection(port int, t zmq.Type) *ZmqConnection {
+func NewZMQConnection(name string, port int, t zmq.Type) *ZmqConnection {
 	c := &ZmqConnection{}
 	var err error
 
@@ -108,12 +112,16 @@ func NewZMQConnection(port int, t zmq.Type) *ZmqConnection {
 		panic(err)
 	}
 	if t == Server {
+		c.Sock.SetIdentity("DAEMON")
 		err = c.Sock.Bind(fmt.Sprintf("tcp://*:%d", port))
 	} else {
-		identity := fmt.Sprintf("%04X-%04X", rand.Intn(0x10000), rand.Intn(0x10000))
+		identity := fmt.Sprintf("%s -%04X", name, rand.Intn(0x10000))
 		c.Sock.SetIdentity(identity)
+		log.Infof("We are %s", identity)
 		err = c.Sock.Connect(fmt.Sprintf("tcp://localhost:%d", port))
-		//c.Soc.SetIdentity("CLIENT")
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	if err != nil {

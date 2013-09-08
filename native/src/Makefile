@@ -1,15 +1,15 @@
 
-#GOPATH := $(CURDIR)
-
 all: protocol library daemon launcher modules
 
 protocol: 
 	mkdir -p protocol
-	rm -f protocol/p2p_meta.go
+	rm -f protocol/p2p_rpc.go
+	rm -f protocol/p2p_rpc.go_
 	rm -f protocol/anevonet_rpc.go
 	rm -f protocol/Common.go
 	rm -f protocol/anevonet_rpc.go_
-	generator ../../protocol/p2p_meta.thrift protocol/p2p_meta.go
+	generator -go.import Common ../../protocol/p2p_rpc.thrift protocol/p2p_rpc.go_
+	sed 's/*Peer/*Common.Peer/' protocol/p2p_rpc.go_ | sed 's/map\[string\]int32/*Common.P2PDNA/'  > protocol/p2p_rpc.go
 	generator -go.import Common ../../protocol/anevonet_rpc.thrift protocol/anevonet_rpc.go_
 	sed 's/*Peer/*Common.Peer/' protocol/anevonet_rpc.go_ | sed 's/map\[string\]int32/*Common.P2PDNA/'  > protocol/anevonet_rpc.go
 	rm -f protocol/anevonet_rpc.go_

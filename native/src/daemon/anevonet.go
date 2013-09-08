@@ -236,22 +236,20 @@ func (a *Anevonet) InternalRPC(port int) {
 
 }
 
-func (a *Anevonet) AddNewPeer(peer *Common.Peer) {
-	log.Infoln("New Peer!", peer.Port)
-}
-
-var port int
+var backendport int
+var p2pport int
 var dir string
 
 func main() {
-	flag.IntVar(&port, "port", 9000, "the port to start an instance of anevonet")
+	flag.IntVar(&backendport, "port", 9000, "the port to start an instance of anevonet")
+	flag.IntVar(&p2pport, "p2pport", 10000, "the port to run the p2p magic")
 	flag.StringVar(&dir, "dir", "anevo", "working directory of anevonet")
 	flag.Parse()
 
-	log.Infof("staring daemon on %d in %s\n", port, dir)
+	log.Infof("staring daemon on %d and %d in %s\n", backendport, p2pport, dir)
 
 	d, _ := filepath.Abs(dir)
-	a := Anevonet{Dir: d, Modules: make(map[string]*Module), Connections: make(map[*Common.Peer]*LocalConnection), ID: Common.Peer{Port: int32(port)}}
+	a := Anevonet{Dir: d, Modules: make(map[string]*Module), Connections: make(map[*Common.Peer]*LocalConnection), ID: Common.Peer{Port: int32(p2pport)}}
 
 	engine, err := xorm.NewEngine("sqlite3", dir+"/anevonet.db")
 	defer engine.Close()
@@ -260,7 +258,7 @@ func main() {
 		panic(err)
 	}
 
-	go a.InternalRPC(port)
+	go a.InternalRPC(backendport)
 
 	// read config file
 	// open database

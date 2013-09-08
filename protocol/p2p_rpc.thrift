@@ -1,6 +1,11 @@
-namespace go external_rpc
+namespace go p2p_rpc
 
 include "Common.thrift"
+
+struct Hello {
+  1: string version = Common.VERSION,
+  2: string node_id,
+}
 
 struct News {
   1: string version = Common.VERSION,
@@ -12,7 +17,7 @@ struct News {
 }
 
 service remote_rpc {
-  void ping(),
+  Hello hi(1:Hello h),
   News gossip(1:News h),
   oneway void bye()
 }

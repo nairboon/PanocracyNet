@@ -36,6 +36,11 @@ responsible for connecting with remote peers and exchanging data, broker for mod
 5. out-of-time delivery of messages
 5.1 store failed messages and retransmit on peer-up
 
+
+6. local peer discovery with UDP broadcasts
+6.1 Broadcast this peer
+6.2 Listen for other broadcasts
+
 #####
 stored int daemon db
 
@@ -51,6 +56,7 @@ import (
 	//flag //"github.com/ogier/pflag"
 	"Common"
 	irpc "anevonet_rpc"
+	"bytes"
 	"errors"
 	"flag"
 	"fmt"
@@ -59,10 +65,12 @@ import (
 	zmq3 "github.com/pebbe/zmq3"
 	"github.com/samuel/go-thrift/thrift"
 	zmq "libzmqthrift"
+	"net"
 	"net/rpc"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"time"
 )
 
 type Module struct {
@@ -93,6 +101,7 @@ type Anevonet struct {
 	Connections map[*Common.Peer]*LocalConnection
 	Dir         string
 	Outbound    OutboundDataChannel
+	ID          Common.Peer
 }
 
 func (a *Anevonet) RegisterModule(module *irpc.Module) (*irpc.RegisterRes, error) {
@@ -193,7 +202,7 @@ func (a *Anevonet) InternalRPC(port int) {
 	defer backend.Close()
 	backend.Bind("inproc://backend")
 
-	// Launch pool of worker threads, precise number is not critical
+	// Launch pool of worker threaCommon.Peerds, precise number is not critical
 	for i := 0; i < 5; i++ {
 		go a.InternalRPCWorker()
 	}
@@ -202,60 +211,81 @@ func (a *Anevonet) InternalRPC(port int) {
 	err := zmq3.Proxy(frontend.Sock, backend, nil)
 	log.Fatalln("Proxy interrupted:", err)
 
-	/*r {
-		select {
-		case msg := <-c.Chans.In():
-			go func() {
-				fmt.Printf("New connection %s:%d\n", msg[0], len(msg))
-				nmsg := msg[2:]
-				if len(nmsg) < 3 {
-				// probably framesize package, dropp
-					fmt.Printf("drop",)
-					c.Chans.Out() <- ""
-					return
-				}
-				//resp := doSomething(msg)
-				r := zmq.ThriftZMQChannel{}
-				r.ChanWriter = zmq.NewChanWriter(c.Chans.Out())
-				// drop first msg as it is framesize
+}
 
+func (a *Anevonet) AddNewPeer(peer *Common.Peer) {
+	log.Infoln("New Peer!", peer.Port)
+}
 
-				fmt.Printf("Msg %s:%d\n", nmsg[0], len(nmsg))
-				r.BufferReader = zmq.NewBufferReader(msg)
-				//rpc.ServeCodec(thrift.NewServerCodec(thrift.NewFramedReadWriteCloser(r, 0), thrift.NewBinaryProtocol(true, false)))
-				fmt.Printf("Never....")
-			}()
-			//c.Chans.Out() <- msg
-			fmt.Printf("Next...\n")
-		case err := <-c.Chans.Errors():
-			fmt.Printf("ERROR: %+v\n", err)
-			panic(err)
+func (a *Anevonet) LocalPeerDiscovery(port int) {
+	// 6.1 Broadcast us
+	go func() {
+		c, err := net.ListenPacket("udp", ":0")
+		if err != nil {
+			log.Fatal(err)
 		}
-	}
-	/*for {
-			conn, err := ln.Accept()
-			if err != nil {
+		defer c.Close()
+		fmt.Println("Broadcasting this Peer...")
+		for {
 
-				continue
+			dst, err := net.ResolveUDPAddr("udp", "255.255.255.255:8032")
+			if err != nil {
+				log.Fatal(err)
 			}
 
+			buf := &bytes.Buffer{}
 
-	}*
+			err = thrift.EncodeStruct(buf, thrift.NewBinaryProtocol(true, false), a.ID)
+			if err != nil {
+				log.Fatal(err)
+			}
+			if _, err := c.WriteTo(buf.Bytes(), dst); err != nil {
+				log.Fatal(err)
+			}
+			time.Sleep(1000 * time.Millisecond)
+		}
+	}()
+
+	// 6.2 Listen for Broadcasts
+	addr := &net.UDPAddr{Port: 8032, IP: net.IPv4bcast}
+	c, err := net.ListenUDP("udp4", addr)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer c.Close()
+	fmt.Println("Llisten for Broadcast...")
 	for {
-		// Wait for next request from client
-		request, _, _ := c.Sock.RecvPart()
-		fmt.Printf("Received request: [%s]\n", string(request))
 
-		//go rpc.ServeCodec(thrift.NewServerCodec(thrift.NewFramedReadWriteCloser(c, 0), thrift.NewBinaryProtocol(true, false)))
-		// Send reply back to client
+		b := make([]byte, 512)
+		n, _, err := c.ReadFrom(b)
+		if err != nil {
+			log.Fatal(err)
+		}
+		b = b[:n]
+		//log.Infoln(n, "bytes read from", peer)
+		//log.Infoln(b)
+		res := &Common.Peer{}
+		buf := bytes.NewBuffer(b)
+		err = thrift.DecodeStruct(buf, thrift.NewBinaryProtocol(true, false), res)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if res.Port == a.ID.Port {
+			//log.Infoln("its us ...")
+		} else {
 
-		c.Sock.SendPart([]byte("World"), false)
-	}*/
+			a.AddNewPeer(res)
+		}
+		time.Sleep(1000 * time.Millisecond)
+	}
 
 }
 
 var port int
 var dir string
+var discoveryUDPPort = 8032
 
 func main() {
 	flag.IntVar(&port, "port", 9000, "the port to start an instance of anevonet")
@@ -265,7 +295,7 @@ func main() {
 	log.Infof("staring daemon on %d in %s\n", port, dir)
 
 	d, _ := filepath.Abs(dir)
-	a := Anevonet{Dir: d, Modules: make(map[string]*Module), Connections: make(map[*Common.Peer]*LocalConnection)}
+	a := Anevonet{Dir: d, Modules: make(map[string]*Module), Connections: make(map[*Common.Peer]*LocalConnection), ID: Common.Peer{Port: int32(port)}}
 
 	engine, err := xorm.NewEngine("sqlite3", dir+"/anevonet.db")
 	defer engine.Close()
@@ -274,6 +304,7 @@ func main() {
 		panic(err)
 	}
 
+	go a.LocalPeerDiscovery(discoveryUDPPort)
 	go a.InternalRPC(port)
 	// declare channels
 	//api_calls := make(APICallChannel, 5)

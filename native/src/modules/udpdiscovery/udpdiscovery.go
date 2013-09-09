@@ -27,6 +27,8 @@ func main() {
 	con := ae.NewConnection("UDPDiscovery")
 
 	s, err := con.Rpc.Status()
+	_, err = con.Rpc.BootstrapAlgorithm()
+	_, err = con.Rpc.Status()
 	if err != nil {
 		panic(err)
 	}
@@ -91,10 +93,12 @@ func main() {
 			//log.Infoln("its us ...")
 		} else {
 			log.Infof("asking to bootstrap with %d", res.Port)
-			ok, err = con.Rpc.BootstrapNetwork(res)
-			if !ok {
+			_, err = con.Rpc.BootstrapAlgorithm()
+			//ok, err = con.Rpc.BootstrapNetwork(res)
+			if !ok || err != nil {
 				log.Errorln("bootstrapp didn't work", err)
 			}
+			log.Infoln("done", err)
 		}
 		time.Sleep(1000 * time.Millisecond)
 	}

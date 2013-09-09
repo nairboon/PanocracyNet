@@ -37,6 +37,9 @@ responsible for connecting with remote peers and exchanging data, broker for mod
 5.1 store failed messages and retransmit on peer-up
 
 
+6. NAT traversal
+6.1 NAT-pmp http://code.google.com/p/go-nat-pmp/
+6.2 UpnP https://github.com/jackpal/Taipei-Torrent/blob/master/upnp.go
 
 #####
 stored int daemon db
@@ -61,10 +64,11 @@ import (
 	zmq3 "github.com/pebbe/zmq3"
 	"github.com/samuel/go-thrift/thrift"
 	zmq "libzmqthrift"
-
+	"net"
 	"net/rpc"
 	"os"
 	"os/signal"
+	erpc "p2p_rpc"
 	"path/filepath"
 )
 
@@ -85,22 +89,51 @@ func (c *LocalConnection) Listen() {
 
 }
 
+type RemoteConnection struct {
+	Peer *Common.Peer
+	Us   *Anevonet
+}
+
+func (c *RemoteConnection) Connect() bool {
+	log.Infof("Remote Connect\n")
+
+	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", c.Peer.IP, c.Peer.Port))
+	if err != nil {
+		panic(err)
+	}
+
+	client := thrift.NewClient(thrift.NewFramedReadWriteCloser(conn, 0), thrift.NewBinaryProtocol(true, false), false)
+	p2p := erpc.RemoteRpcClient{client}
+
+	hi := erpc.Hello{NodeID: c.Us.ID.ID}
+	res, err := p2p.Hi(&hi)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Printf("Response: %+v\n", res)
+	return true
+}
+
 type OutboundData struct {
 }
 
 type OutboundDataChannel chan OutboundData
 
 type Anevonet struct {
-	Engine   *xorm.Engine
-	Modules  map[string]*Module
-	Services map[string]*irpc.Service
-	// PeerConnection initiated through algorithms
-	Connections  map[*Common.Peer]*LocalConnection
-	OnlinePeers  []*Common.Peer
-	Dir          string
-	Outbound     OutboundDataChannel
-	ID           Common.Peer
-	Bootstrapped bool // true once we have atleast 1 connection
+	Engine      *xorm.Engine
+	Modules     map[string]*Module
+	Services    map[string]*irpc.Service
+	Connections map[*Common.Peer]*RemoteConnection
+	// Tunnels data from module specific socket to the remote peer
+	Tunnels           map[*Common.Peer]*LocalConnection
+	OnlinePeers       map[*Common.Peer]bool
+	Dir               string
+	Outbound          OutboundDataChannel
+	ID                Common.Peer
+	Bootstrapped      bool // true once we have atleast 1 connection
+	InternalRPCServer *rpc.Server
+	ExternalRPCServer *rpc.Server
 }
 
 func (a *Anevonet) RegisterModule(module *irpc.Module) (*irpc.RegisterRes, error) {
@@ -128,8 +161,8 @@ func (a *Anevonet) RegisterService(s *irpc.Service) (bool, error) {
 func (a *Anevonet) RequestConnection(req *irpc.ConnectionReq) (*irpc.ConnectionRes, error) {
 	log.Infof("RequestConnection\n")
 	// check if we're already connected
-	if _, ok := a.Connections[req.Target]; ok {
-		return &irpc.ConnectionRes{Socket: a.Connections[req.Target].Socket}, nil
+	if _, ok := a.Tunnels[req.Target]; ok {
+		return &irpc.ConnectionRes{Socket: a.Tunnels[req.Target].Socket}, nil
 	}
 
 	basepath := a.Dir + "/sockets/" + req.Module + "/connections/"
@@ -138,7 +171,7 @@ func (a *Anevonet) RequestConnection(req *irpc.ConnectionReq) (*irpc.ConnectionR
 		log.Fatal(err)
 	}
 	s := &LocalConnection{Target: req.Target, Socket: basepath + fmt.Sprintf("%s-%d", req.Target.IP, req.Target.Port)}
-	a.Connections[req.Target] = s
+	a.Tunnels[req.Target] = s
 	s.Out = &a.Outbound
 	go s.Listen()
 
@@ -151,6 +184,12 @@ func (a *Anevonet) ShutdownConnection(req *irpc.ConnectionRes) error {
 
 }
 
+func (a *Anevonet) ConnectRemotePeer(p *Common.Peer) error {
+	c := &RemoteConnection{Peer: p}
+	c.Connect()
+	return nil
+}
+
 func (a *Anevonet) Status() (*irpc.StatusRes, error) {
 	log.Infof("Status\n")
 	return &irpc.StatusRes{ID: &a.ID, OnlinePeers: int32(len(a.OnlinePeers))}, nil
@@ -161,10 +200,10 @@ func (a *Anevonet) BootstrapAlgorithm() (*irpc.BootstrapRes, error) {
 	return &irpc.BootstrapRes{}, nil
 }
 
-func (a *Anevonet) BootstrapNetwork(peer *Common.Peer) (bool, error) {
+func (a *Anevonet) BootstrapNetwork(peer *Common.Peer) (*irpc.BootstrapNetworkRes, error) {
 	log.Infof("BootstrapNetwork (%d)\n", peer.Port)
 
-	return false, nil
+	return &irpc.BootstrapNetworkRes{}, errors.New("service already registered")
 }
 
 func pop(msg []string) (head, tail []string) {
@@ -196,7 +235,7 @@ func (a *Anevonet) InternalRPCWorker() {
 		continue
 		}*/
 		identity, content := pop(msg)
-		//log.Infof("recv msg from %s: %s\n", identity, content)
+		log.Infof("recv msg from %s: %s\n", identity, content)
 		r := zmq.ThriftZMQChannel{}
 		//c := make(chan []byte, 5)
 
@@ -205,7 +244,7 @@ func (a *Anevonet) InternalRPCWorker() {
 		//log.Infof("new reader with n: %d\n", len(content))
 		r.BufferReader = zmq.NewBufferReader(content)
 		r.BufferWriter = zmq.NewBufferWriter()
-		rpc.ServeRequest(thrift.NewServerCodec(zmq.NewFramedReadWriteCloser(r, 0), thrift.NewBinaryProtocol(true, false)))
+		a.InternalRPCServer.ServeRequest(thrift.NewServerCodec(zmq.NewFramedReadWriteCloser(r, 0), thrift.NewBinaryProtocol(true, false)))
 
 		res := r.BufferWriter.Buf.Bytes()
 		//log.Infof("sending back to (%s) (%d): %s\n", identity, len(res), res)
@@ -215,8 +254,8 @@ func (a *Anevonet) InternalRPCWorker() {
 }
 
 func (a *Anevonet) InternalRPC(port int) {
-
-	rpc.RegisterName("Thrift", &irpc.InternalRpcServer{a})
+	a.InternalRPCServer = rpc.NewServer()
+	a.InternalRPCServer.RegisterName("Thrift", &irpc.InternalRpcServer{a})
 
 	frontend := zmq.NewZMQConnection("Daemon", port, zmq.Server)
 
@@ -236,6 +275,37 @@ func (a *Anevonet) InternalRPC(port int) {
 
 }
 
+type P2PRPCServer struct {
+	ae *Anevonet
+}
+
+func (s *P2PRPCServer) Hi(hello *erpc.Hello) (*erpc.Hello, error) {
+	log.Infof("Hello from %s\n", hello.Version)
+	return nil, nil
+}
+
+func (a *Anevonet) P2PRPC(port int) {
+	ps := &P2PRPCServer{ae: a}
+
+	a.ExternalRPCServer = rpc.NewServer()
+	ln, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", port))
+	if err != nil {
+		panic(err)
+	}
+
+	a.ExternalRPCServer.RegisterName("P2P", &erpc.RemoteRpcServer{ps})
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			fmt.Printf("ERROR: %+v\n", err)
+			continue
+		}
+		fmt.Printf("New P2P connection %+v\n", conn)
+		go a.ExternalRPCServer.ServeCodec(thrift.NewServerCodec(thrift.NewFramedReadWriteCloser(conn, 0), thrift.NewBinaryProtocol(true, false)))
+	}
+
+}
+
 var backendport int
 var p2pport int
 var dir string
@@ -249,7 +319,10 @@ func main() {
 	log.Infof("staring daemon on %d and %d in %s\n", backendport, p2pport, dir)
 
 	d, _ := filepath.Abs(dir)
-	a := Anevonet{Dir: d, Modules: make(map[string]*Module), Connections: make(map[*Common.Peer]*LocalConnection), ID: Common.Peer{Port: int32(p2pport)}}
+	a := Anevonet{Dir: d, Modules: make(map[string]*Module),
+		Tunnels:     make(map[*Common.Peer]*LocalConnection),
+		Connections: make(map[*Common.Peer]*RemoteConnection),
+		ID:          Common.Peer{Port: int32(p2pport), ID: "JAJAJAJAJAJ"}}
 
 	engine, err := xorm.NewEngine("sqlite3", dir+"/anevonet.db")
 	defer engine.Close()
@@ -259,7 +332,7 @@ func main() {
 	}
 
 	go a.InternalRPC(backendport)
-
+	go a.P2PRPC(p2pport)
 	// read config file
 	// open database
 

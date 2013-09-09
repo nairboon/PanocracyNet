@@ -33,7 +33,9 @@ struct StatusRes {
 struct BootstrapRes {
  1: list<Common.Peer> Peers
 }
-
+struct BootstrapNetworkRes {
+ 1: bool Success
+}
 
 service InternalRpc {
 StatusRes Status(),
@@ -49,6 +51,6 @@ StatusRes Status(),
 /* bootstrap management */
  /* to get initial peers for an algorithm */
   BootstrapRes BootstrapAlgorithm()
-bool BootstrapNetwork(1:Common.Peer p)
+BootstrapNetworkRes BootstrapNetwork(1:Common.Peer p)
 
 }

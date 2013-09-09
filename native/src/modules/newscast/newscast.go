@@ -119,6 +119,7 @@ func main() {
 	_ = socket
 	//go nc.PassiveThread(socket)
 	log.Printf("starting active thread")
+	_, _ = nc.Con.Rpc.Status()
 	go nc.ActiveThread()
 	/* connect to daemon
 	   register protocol

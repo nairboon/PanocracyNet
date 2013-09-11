@@ -51,6 +51,6 @@ StatusRes Status(),
 /* bootstrap management */
  /* to get initial peers for an algorithm */
   BootstrapRes BootstrapAlgorithm()
-BootstrapNetworkRes BootstrapNetwork(1:Common.Peer p)
+/*BootstrapNetworkRes*/ bool BootstrapNetwork(1:Common.Peer p)
 
 }

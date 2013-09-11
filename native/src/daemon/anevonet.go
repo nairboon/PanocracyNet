@@ -184,10 +184,9 @@ func (a *Anevonet) ShutdownConnection(req *irpc.ConnectionRes) error {
 
 }
 
-func (a *Anevonet) ConnectRemotePeer(p *Common.Peer) error {
-	c := &RemoteConnection{Peer: p}
-	c.Connect()
-	return nil
+func (a *Anevonet) ConnectRemotePeer(p *Common.Peer) bool {
+	c := &RemoteConnection{Peer: p, Us: a}
+	return c.Connect()
 }
 
 func (a *Anevonet) Status() (*irpc.StatusRes, error) {
@@ -200,10 +199,10 @@ func (a *Anevonet) BootstrapAlgorithm() (*irpc.BootstrapRes, error) {
 	return &irpc.BootstrapRes{}, nil
 }
 
-func (a *Anevonet) BootstrapNetwork(peer *Common.Peer) (*irpc.BootstrapNetworkRes, error) {
+func (a *Anevonet) BootstrapNetwork(peer *Common.Peer) (bool, error) {
 	log.Infof("BootstrapNetwork (%d)\n", peer.Port)
-
-	return &irpc.BootstrapNetworkRes{}, errors.New("service already registered")
+	ok := a.ConnectRemotePeer(peer)
+	return /*&irpc.BootstrapNetworkRes{}*/ ok, nil
 }
 
 func pop(msg []string) (head, tail []string) {
@@ -235,7 +234,7 @@ func (a *Anevonet) InternalRPCWorker() {
 		continue
 		}*/
 		identity, content := pop(msg)
-		log.Infof("recv msg from %s: %s\n", identity, content)
+		//log.Infof("recv msg from %s: %s\n", identity, content)
 		r := zmq.ThriftZMQChannel{}
 		//c := make(chan []byte, 5)
 
@@ -268,11 +267,13 @@ func (a *Anevonet) InternalRPC(port int) {
 	for i := 0; i < 2; i++ {
 		go a.InternalRPCWorker()
 	}
-
+	var err error
 	// Connect backend to frontend via a proxy
-	err := zmq3.Proxy(frontend.Sock, backend, nil)
-	log.Fatalln("Proxy interrupted:", err)
-
+	for err != errors.New("interrupted system call") {
+		err = zmq3.Proxy(frontend.Sock, backend, nil)
+		log.Errorln("Proxy interrupted:", err)
+	}
+	log.Fatalln("Proxy errord:", err)
 }
 
 type P2PRPCServer struct {
@@ -293,7 +294,7 @@ func (a *Anevonet) P2PRPC(port int) {
 		panic(err)
 	}
 
-	a.ExternalRPCServer.RegisterName("P2P", &erpc.RemoteRpcServer{ps})
+	a.ExternalRPCServer.RegisterName("Thrift", &erpc.RemoteRpcServer{ps})
 	for {
 		conn, err := ln.Accept()
 		if err != nil {

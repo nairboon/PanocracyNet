@@ -13,6 +13,7 @@ package main
 import (
 	"Common"
 	"bytes"
+
 	"fmt"
 	log "github.com/golang/glog"
 	"github.com/samuel/go-thrift/thrift"
@@ -27,14 +28,13 @@ func main() {
 	con := ae.NewConnection("UDPDiscovery")
 
 	s, err := con.Rpc.Status()
-	_, err = con.Rpc.BootstrapAlgorithm()
-	_, err = con.Rpc.Status()
 	if err != nil {
 		panic(err)
 	}
 	log.Info("got status")
 	id := s.ID
 	var ok bool
+
 	// 6.1 Broadcast us
 	go func() {
 		c, err := net.ListenPacket("udp", ":0")
@@ -93,8 +93,7 @@ func main() {
 			//log.Infoln("its us ...")
 		} else {
 			log.Infof("asking to bootstrap with %d", res.Port)
-			_, err = con.Rpc.BootstrapAlgorithm()
-			//ok, err = con.Rpc.BootstrapNetwork(res)
+			ok, err = con.Rpc.BootstrapNetwork(res)
 			if !ok || err != nil {
 				log.Errorln("bootstrapp didn't work", err)
 			}
@@ -103,4 +102,5 @@ func main() {
 		time.Sleep(1000 * time.Millisecond)
 	}
 	fmt.Println("stopping discovery")
+
 }

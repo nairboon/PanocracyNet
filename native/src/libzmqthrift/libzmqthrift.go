@@ -71,6 +71,7 @@ func (z *ZmqConnection) Send() {
 	z.mu.Lock()
 	//fmt.Printf("sending: %s\n", z.outbuf.String())
 	z.Sock.SendMessage(z.outbuf.String())
+	z.outbuf.Reset()
 	z.mu.Unlock()
 	return
 }

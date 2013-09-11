@@ -90,16 +90,18 @@ func (c *LocalConnection) Listen() {
 }
 
 type RemoteConnection struct {
-	Peer *Common.Peer
-	Us   *Anevonet
+	Peer       *Common.Peer
+	Us         *Anevonet
+	Connection *net.Conn
 }
 
-func (c *RemoteConnection) Connect() bool {
+func (c *RemoteConnection) Connect() error {
 	log.Infof("Remote Connect\n")
 
 	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", c.Peer.IP, c.Peer.Port))
 	if err != nil {
-		panic(err)
+		log.Error(err)
+		return errors.New("cannot connect to peer")
 	}
 
 	client := thrift.NewClient(thrift.NewFramedReadWriteCloser(conn, 0), thrift.NewBinaryProtocol(true, false), false)
@@ -108,11 +110,12 @@ func (c *RemoteConnection) Connect() bool {
 	hi := erpc.Hello{NodeID: c.Us.ID.ID}
 	res, err := p2p.Hi(&hi)
 	if err != nil {
-		panic(err)
+		log.Error(err)
+		return errors.New("cannot rpc with peer")
 	}
-
+	c.Connection = &conn
 	fmt.Printf("Response: %+v\n", res)
-	return true
+	return c.Us.AddRemotePeer(c.Peer, c)
 }
 
 type OutboundData struct {
@@ -184,7 +187,15 @@ func (a *Anevonet) ShutdownConnection(req *irpc.ConnectionRes) error {
 
 }
 
-func (a *Anevonet) ConnectRemotePeer(p *Common.Peer) bool {
+func (a *Anevonet) AddRemotePeer(p *Common.Peer, c *RemoteConnection) error {
+	if _, ok := a.Connections[p]; ok {
+		return errors.New("Peer already registered")
+	}
+	a.Connections[p] = c
+	return nil
+}
+
+func (a *Anevonet) ConnectRemotePeer(p *Common.Peer) error {
 	c := &RemoteConnection{Peer: p, Us: a}
 	return c.Connect()
 }
@@ -201,8 +212,12 @@ func (a *Anevonet) BootstrapAlgorithm() (*irpc.BootstrapRes, error) {
 
 func (a *Anevonet) BootstrapNetwork(peer *Common.Peer) (bool, error) {
 	log.Infof("BootstrapNetwork (%d)\n", peer.Port)
-	ok := a.ConnectRemotePeer(peer)
-	return /*&irpc.BootstrapNetworkRes{}*/ ok, nil
+	err := a.ConnectRemotePeer(peer)
+	if err != nil {
+		return true, err
+	} else {
+		return false, err
+	}
 }
 
 func pop(msg []string) (head, tail []string) {
@@ -282,7 +297,8 @@ type P2PRPCServer struct {
 
 func (s *P2PRPCServer) Hi(hello *erpc.Hello) (*erpc.Hello, error) {
 	log.Infof("Hello from %s\n", hello.Version)
-	return nil, nil
+	resp := erpc.Hello{NodeID: s.ae.ID.ID}
+	return &resp, nil
 }
 
 func (a *Anevonet) P2PRPC(port int) {

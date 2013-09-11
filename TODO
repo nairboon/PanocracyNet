@@ -1,3 +1,5 @@
 
 * gd: faster check for -e
 * go-thrift: merge changes
+* launcher check for already running modules
+* rpcconnect save connection

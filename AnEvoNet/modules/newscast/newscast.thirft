@@ -1,6 +1,6 @@
 namespace go newscast_protocol
 
-include "../../../../protocol/Common.thrift"
+include "../../protocol/Common.thrift"
 
 
 const Common.P2PDNA RootDNA = {"sleep": 250, "cachesize": 10, "sendview": 5}

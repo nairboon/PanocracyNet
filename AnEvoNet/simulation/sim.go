@@ -20,17 +20,18 @@ func main() {
 	flag.Parse()
 
 	log.Printf("staring smulation with %d peers\n", n)
-baseport := 9000
-
+	rpcport := 9000
+	p2pport := 10000
 	peers := make(map[int]*exec.Cmd)
 
 for i := 0; i < n; i++ {
-        portflag := fmt.Sprintf("--port=%d", baseport + i)
+        rpcportflag := fmt.Sprintf("--rpc-port=%d", rpcport + i)
+        p2pportflag := fmt.Sprintf("--p2p-port=%d", p2pport + i)
 	dirflag := fmt.Sprintf("--dir=peer%d", i)
 	filename, _ := osext.Executable()
 	wd := path.Dir(filename)
 
-	peer := exec.Command(wd+"/../native/bin/launcher", portflag, dirflag,)
+	peer := exec.Command(wd+"/../bin/launcher", rpcportflag, p2pportflag, dirflag)
 	peer.Stdout = os.Stdout
 	peer.Stderr = os.Stderr
 	err := peer.Start()

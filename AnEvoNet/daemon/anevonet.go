@@ -328,8 +328,8 @@ var p2pport int
 var dir string
 
 func main() {
-	flag.IntVar(&backendport, "port", 9000, "the port to start an instance of anevonet")
-	flag.IntVar(&p2pport, "p2pport", 10000, "the port to run the p2p magic")
+	flag.IntVar(&backendport, "rpc-port", 9000, "port of the local rpc service")
+	flag.IntVar(&p2pport, "p2p-port", 10000, "port of the p2p service")
 	flag.StringVar(&dir, "dir", "anevo", "working directory of anevonet")
 	flag.Parse()
 

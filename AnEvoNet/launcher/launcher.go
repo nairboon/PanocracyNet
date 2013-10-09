@@ -16,14 +16,15 @@ var p2pport int
 var dir string
 
 func main() {
-	flag.IntVar(&port, "port", 9000, "the port to start an instance of anevonet")
-	flag.IntVar(&p2pport, "p2pport", 10000, "the port to run the p2p magic")
+	flag.IntVar(&port, "rpc-port", 9000, "port of the local rpc service")
+	flag.IntVar(&p2pport, "p2p-port", 10000, "port of the p2p service")
 	flag.StringVar(&dir, "dir", "anevo", "working directory of anevonet")
 	flag.Parse()
 
 	log.Printf("staring daemon on %d\n", port)
-	portflag := fmt.Sprintf("--port=%d", port)
-	p2pflag := fmt.Sprintf("--p2pport=%d", p2pport)
+	portflag := fmt.Sprintf("--rpc-port=%d", port)
+	moduleflag := fmt.Sprintf("-port=%d", port)
+	p2pflag := fmt.Sprintf("--p2p-port=%d", p2pport)
 	dirflag := fmt.Sprintf("-dir=%s", dir)
 	filename, _ := osext.Executable()
 	wd := path.Dir(filename)
@@ -45,7 +46,7 @@ func main() {
 	}
 
 	for _, m := range modulesDir {
-		c := exec.Command(wd+"/modules/"+m.Name(), portflag, "-alsologtostderr=true")
+		c := exec.Command(wd+"/modules/"+m.Name(), moduleflag, "-alsologtostderr=true")
 		c.Stdout = os.Stdout
 		c.Stderr = os.Stderr
 		err := c.Start()

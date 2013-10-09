@@ -42,9 +42,13 @@ func (*AnEvoConnection) ContinueRunning(dna Common.P2PDNA) bool {
 	return true
 }
 
-func (*AnEvoConnection) Bootstrap() []*Common.Peer {
+func (a *AnEvoConnection) Bootstrap() []*Common.Peer {
 	var peers []*Common.Peer
-	return peers
+	r, err := a.Rpc.BootstrapAlgorithm()
+	if err != nil {
+		return peers
+	}
+	return r.Peers
 }
 
 func (a *AnEvoConnection) GetPeerConnection(p *Common.Peer) zmq.RPCClient {

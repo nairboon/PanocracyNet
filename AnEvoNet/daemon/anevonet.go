@@ -64,6 +64,7 @@ import (
 	zmq3 "github.com/pebbe/zmq3"
 	"github.com/samuel/go-thrift/thrift"
 	zmq "libzmqthrift"
+	"math/rand"
 	"net"
 	"net/rpc"
 	"os"
@@ -128,10 +129,11 @@ type PeerRConnection struct {
 	Connection *RemoteConnection
 }
 type Anevonet struct {
-	Engine      *xorm.Engine
-	Modules     map[string]*Module
-	Services    map[string]*irpc.Service
-	Connections map[string]*PeerRConnection // peerid as key
+	Engine           *xorm.Engine
+	Modules          map[string]*Module
+	Services         map[string]*irpc.Service
+	Connections      map[string]*PeerRConnection // peerid as key
+	_rnd_Connections map[int]string
 	// Tunnels data from module specific socket to the remote peer
 	Tunnels           map[*Common.Peer]*LocalConnection
 	OnlinePeers       map[*Common.Peer]bool
@@ -196,6 +198,7 @@ func (a *Anevonet) AddRemotePeer(p *Common.Peer, c *RemoteConnection) error {
 		return errors.New("Peer already registered")
 	}
 	a.Connections[p.ID] = &PeerRConnection{Peer: p, Connection: c}
+	a._rnd_Connections[len(a._rnd_Connections)] = p.ID
 	log.Infof("Added %s-%s:%d --- %d\n", p.ID, p.IP, p.Port, len(a.Connections))
 	return nil
 }
@@ -216,8 +219,17 @@ func (a *Anevonet) Status() (*irpc.StatusRes, error) {
 }
 
 func (a *Anevonet) BootstrapAlgorithm() (*irpc.BootstrapRes, error) {
-	log.Infof("BootstrapAlogrithm\n")
-	return &irpc.BootstrapRes{}, nil
+	log.Infof("BootstrapAlgorithm\n")
+
+	if len(a.Connections) < 1 {
+		return &irpc.BootstrapRes{}, nil
+	} else {
+		//pick random connection
+		nC := rand.Intn(len(a._rnd_Connections))
+		id := a._rnd_Connections[nC]
+		var peers = []*Common.Peer{a.Connections[id].Peer}
+		return &irpc.BootstrapRes{Peers: peers}, nil
+	}
 }
 
 func (a *Anevonet) BootstrapNetwork(peer *Common.Peer) (bool, error) {
@@ -351,9 +363,10 @@ func main() {
 
 	d, _ := filepath.Abs(dir)
 	a := Anevonet{Dir: d, Modules: make(map[string]*Module),
-		Tunnels:     make(map[*Common.Peer]*LocalConnection),
-		Connections: make(map[string]*PeerRConnection),
-		ID:          Common.Peer{Port: int32(p2pport), ID: "JAJAJAJAJAJ"}}
+		Tunnels:          make(map[*Common.Peer]*LocalConnection),
+		Connections:      make(map[string]*PeerRConnection),
+		_rnd_Connections: make(map[int]string),
+		ID:               Common.Peer{Port: int32(p2pport), ID: "JAJAJAJAJAJ"}}
 
 	engine, err := xorm.NewEngine("sqlite3", dir+"/anevonet.db")
 	defer engine.Close()

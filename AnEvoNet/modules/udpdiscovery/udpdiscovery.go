@@ -20,13 +20,14 @@ import (
 	"github.com/samuel/go-thrift/thrift"
 	ae "libanevonet"
 	"net"
+
 	"time"
 )
 
 func main() {
 	log.Info("discovering over udp")
 
-	con := ae.NewConnection("UDPDiscovery")
+	con := ae.NewModule("UDPDiscovery")
 
 	s, err := con.Rpc.Status()
 	if err != nil {
@@ -34,6 +35,9 @@ func main() {
 	}
 	log.Info("got status")
 	id := s.ID
+
+	id.IP = "localhost"
+	fmt.Println("our address:", id.IP)
 	var ok bool
 
 	// 6.1 Listen for Broadcasts to bootstrap

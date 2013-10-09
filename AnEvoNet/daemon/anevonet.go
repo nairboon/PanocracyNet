@@ -71,6 +71,7 @@ import (
 	"os/signal"
 	erpc "p2p_rpc"
 	"path/filepath"
+	"strings"
 )
 
 type Module struct {
@@ -82,12 +83,39 @@ type Module struct {
 type LocalConnection struct {
 	// spawn new listener, channel into output manager
 	Socket string
+	Module string
 	Target *Common.Peer
 	Out    *OutboundDataChannel
 }
 
-func (c *LocalConnection) Listen() {
+func (c *LocalConnection) Listen() error {
+	server, _ := zmq3.NewSocket(zmq3.REP)
+	defer server.Close()
+	err := server.Bind(fmt.Sprintf("ipc://%s", zmq.FixUnixSocketPath(c.Socket)))
+	if err != nil {
+		log.Error(err)
+		return err
+	}
 
+	for {
+		//log.Info("waiting for data..")
+		// The DEALER socket gives us the reply envelope and message
+		msg, _ := server.RecvMessage(0)
+		/*msg, err := worker.RecvMessage(zmq3.DONTWAIT)
+		if err != nil {
+		continue
+		}*/
+		identity, content := pop(msg)
+
+		log.Infof("recv msg from %s: %s\n", identity, content)
+		out := OutboundData{Target: c.Target, Module: c.Module, Data: []byte(strings.Join(content, ""))}
+		*c.Out <- out
+		//log.Infof("sending back to (%s) (%d): %s\n", identity, len(res), res)
+		server.SendMessage(identity, "ACK")
+		//log.Info("done sending!!!")
+	}
+
+	return nil
 }
 
 type RemoteConnection struct {
@@ -108,18 +136,22 @@ func (c *RemoteConnection) Connect() error {
 	client := thrift.NewClient(thrift.NewFramedReadWriteCloser(conn, 0), thrift.NewBinaryProtocol(true, false), false)
 	p2p := erpc.RemoteRpcClient{client}
 
-	hi := erpc.Hello{NodeID: c.Us.ID.ID, Version: Common.VERSION}
-	res, err := p2p.Hi(&hi)
+	hi := erpc.HelloSYN{NodeID: c.Us.ID.ID, Version: Common.VERSION}
+	res, err := p2p.Hello(&hi)
 	if err != nil {
 		log.Error(err)
 		return errors.New("cannot rpc with peer")
 	}
+	//hisynack := erpc.HelloSYNACK{NodeID: c.Us.ID.ID, Transport}
 	c.Connection = &conn
 	fmt.Printf("Response: %+v\n", res)
 	return c.Us.AddRemotePeer(c.Peer, c)
 }
 
 type OutboundData struct {
+	Module string
+	Data   []byte
+	Target *Common.Peer
 }
 
 type OutboundDataChannel chan OutboundData
@@ -134,6 +166,7 @@ type Anevonet struct {
 	Services         map[string]*irpc.Service
 	Connections      map[string]*PeerRConnection // peerid as key
 	_rnd_Connections map[int]string
+	Transports       map[Common.Transport]int32
 	// Tunnels data from module specific socket to the remote peer
 	Tunnels           map[*Common.Peer]*LocalConnection
 	OnlinePeers       map[*Common.Peer]bool
@@ -169,17 +202,18 @@ func (a *Anevonet) RegisterService(s *irpc.Service) (bool, error) {
 
 func (a *Anevonet) RequestConnection(req *irpc.ConnectionReq) (*irpc.ConnectionRes, error) {
 	log.Infof("RequestConnection\n")
+	// TODO: what if multiple modules access the same peer?
 	// check if we're already connected
 	if _, ok := a.Tunnels[req.Target]; ok {
 		return &irpc.ConnectionRes{Socket: a.Tunnels[req.Target].Socket}, nil
 	}
 
 	basepath := a.Dir + "/sockets/" + req.Module + "/connections/"
-	err := os.MkdirAll(basepath, 0655)
+	err := os.MkdirAll(basepath, 0766)
 	if err != nil {
 		log.Fatal(err)
 	}
-	s := &LocalConnection{Target: req.Target, Socket: basepath + fmt.Sprintf("%s-%d", req.Target.IP, req.Target.Port)}
+	s := &LocalConnection{Module: req.Module, Target: req.Target, Socket: basepath + fmt.Sprintf("%s-%d", req.Target.IP, req.Target.Port)}
 	a.Tunnels[req.Target] = s
 	s.Out = &a.Outbound
 	go s.Listen()
@@ -321,13 +355,27 @@ type P2PRPCServer struct {
 	ae *Anevonet
 }
 
-func (s *P2PRPCServer) Hi(hello *erpc.Hello) (*erpc.Hello, error) {
+func (s *P2PRPCServer) Hello(hello *erpc.HelloSYN) (*erpc.HelloSYNACK, error) {
 	log.Infof("Hello from %s\n", hello.Version)
-	resp := erpc.Hello{NodeID: s.ae.ID.ID, Version: Common.VERSION}
+	resp := erpc.HelloSYNACK{NodeID: s.ae.ID.ID, Version: Common.VERSION, SupportedTransport: s.ae.Transports}
 	return &resp, nil
 }
 
-func (a *Anevonet) P2PRPC(port int) {
+func (s *P2PRPCServer) Connect(c *erpc.ConnectSYN) (bool, error) {
+	log.Infof("connect from %s\n", c.NodeID)
+	//resp := erpc.HelloSYNACK{NodeID: s.ae.ID.ID, Version: Common.VERSION}
+	return true, nil
+}
+
+func (a *Anevonet) P2PRPC(port int32) {
+
+	a.TransportTCP(port)
+
+}
+
+func (a *Anevonet) TransportTCP(port int32) {
+	a.Transports[Common.TransportTCP] = port
+
 	ps := &P2PRPCServer{ae: a}
 
 	a.ExternalRPCServer = rpc.NewServer()
@@ -366,6 +414,7 @@ func main() {
 		Tunnels:          make(map[*Common.Peer]*LocalConnection),
 		Connections:      make(map[string]*PeerRConnection),
 		_rnd_Connections: make(map[int]string),
+		Transports:       make(map[Common.Transport]int32),
 		ID:               Common.Peer{Port: int32(p2pport), ID: "JAJAJAJAJAJ"}}
 
 	engine, err := xorm.NewEngine("sqlite3", dir+"/anevonet.db")
@@ -376,7 +425,7 @@ func main() {
 	}
 
 	go a.InternalRPC(backendport)
-	go a.P2PRPC(p2pport)
+	go a.P2PRPC(int32(p2pport))
 	// read config file
 	// open database
 

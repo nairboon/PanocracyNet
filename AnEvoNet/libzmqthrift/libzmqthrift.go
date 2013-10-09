@@ -9,6 +9,8 @@ import (
 	"github.com/samuel/go-thrift/thrift"
 	"io"
 	"math/rand"
+	"os"
+	"path"
 	"sync"
 	"time"
 )
@@ -123,6 +125,48 @@ func NewZMQConnection(name string, port int, t zmq.Type) *ZmqConnection {
 		if err != nil {
 			panic(err)
 		}
+	}
+
+	if err != nil {
+		panic(err)
+	}
+
+	return c
+}
+
+// http://openvswitch.org/pipermail/dev/2010-November/004456.html
+func FixUnixSocketPath(p string) string {
+	if len(p) > 108 {
+
+		dir := path.Dir(p)
+		base := path.Base(p)
+
+		f, _ := os.Open(dir)
+
+		fd := f.Fd()
+
+		np := fmt.Sprintf("/proc/self/fd/%d/%s", fd, base)
+		return np
+	} else {
+		return p
+	}
+
+}
+func NewZMQUnixConnection(path string) *ZmqConnection {
+	c := &ZmqConnection{}
+	var err error
+
+	c.Sock, err = zmq.NewSocket(zmq.REQ)
+	if err != nil {
+		panic(err)
+	}
+
+	identity := fmt.Sprintf("%s -%04X", path, rand.Intn(0x10000))
+	c.Sock.SetIdentity(identity)
+	log.Infof("We are %s", identity)
+	err = c.Sock.Connect(fmt.Sprintf("ipc://%s", FixUnixSocketPath(path)))
+	if err != nil {
+		panic(err)
 	}
 
 	if err != nil {

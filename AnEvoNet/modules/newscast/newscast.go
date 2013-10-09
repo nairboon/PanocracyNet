@@ -60,8 +60,13 @@ func (n *Newscast) ActiveThread() {
 		if len(n.State.NewsItems) < 1 {
 			log.Printf("we have 0 peers in cache")
 			// we have no peers at all!
-			for p := range n.Con.Bootstrap() {
-				fmt.Printf("New peer %+v\n", p)
+			pl, err := n.Con.Bootstrap()
+			if err == nil {
+				for _, p := range pl {
+					fmt.Printf("New peer %+v\n", p)
+					cacheentry := &proto.CacheEntry{Agent: p, Time: &proto.Timestamp{Sec: time.Now().Unix()}}
+					n.State.NewsItems = append(n.State.NewsItems, cacheentry)
+				}
 			}
 			// still no peers
 			if len(n.State.NewsItems) < 1 {
@@ -72,7 +77,7 @@ func (n *Newscast) ActiveThread() {
 		// select Peer
 		peer := n.State.NewsItems[r.Intn(len(n.State.NewsItems))].Agent
 		pc := proto.NewscastClient{n.Con.GetPeerConnection(peer)}
-
+		log.Printf("going to gossip...")
 		recstate, err := pc.ExchangeState(n.State)
 		if err != nil {
 			panic(err)
@@ -112,8 +117,8 @@ func main() {
 	log.Printf("newscasting")
 
 	nc := Newscast{}
-	nc.Con = ae.NewConnection("Newscast")
-	socket := nc.Con.RegisterModule("Newscast", proto.RootDNA, &nc.DNA)
+	nc.Con = ae.NewModule("Newscast")
+	socket := nc.Con.Register(proto.RootDNA, &nc.DNA)
 	nc.State = &proto.PeerState{}
 
 	_ = socket

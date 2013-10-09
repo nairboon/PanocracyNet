@@ -3,12 +3,14 @@ namespace go Common
 
 const string VERSION = "0.1.0"
 
-
+/*
+ currently using tcp
+*/
 enum Transport {
  TCP, // native client <-> native client
  WEBSOCKET, // native client <-> browser
  WEBRTC, // browser <-> browser
- SCTP // future :)
+ SCTP // future :), UDT, DCCP,µTP
 }
 
 
@@ -25,5 +27,5 @@ struct Peer {
 }
 
 struct Timestamp {
- 1: i32 sec
+ 1: i64 sec
 }

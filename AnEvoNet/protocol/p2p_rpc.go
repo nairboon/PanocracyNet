@@ -3,8 +3,7 @@
 package p2p_rpc
 
 import (
-	"strconv"
-	"fmt"
+	
 	"Common"
 )
 
@@ -12,53 +11,6 @@ type P2PDNA *Common.P2PDNA
 
 const VERSION string = "0.1.0"
 
-type Transport int32
-
-var(
-	TransportSCTP = Transport(3)
-	TransportTCP = Transport(0)
-	TransportWEBRTC = Transport(2)
-	TransportWEBSOCKET = Transport(1)
-	TransportByName = map[string]Transport{
-		"Transport.SCTP": TransportSCTP,
-		"Transport.TCP": TransportTCP,
-		"Transport.WEBRTC": TransportWEBRTC,
-		"Transport.WEBSOCKET": TransportWEBSOCKET,
-	}
-	TransportByValue = map[Transport]string{
-		TransportSCTP: "Transport.SCTP",
-		TransportTCP: "Transport.TCP",
-		TransportWEBRTC: "Transport.WEBRTC",
-		TransportWEBSOCKET: "Transport.WEBSOCKET",
-	}
-)
-
-func (e Transport) String() string {
-	name := TransportByValue[e]
-	if name == "" {
-		name = fmt.Sprintf("Unknown enum value Transport(%d)", e)
-	}
-	return name
-}
-
-func (e Transport) MarshalJSON() ([]byte, error) {
-	name := TransportByValue[e]
-	if name == "" {
-		name = strconv.Itoa(int(e))
-	}
-	return []byte("\""+name+"\""), nil
-}
-
-func (e *Transport) UnmarshalJSON(b []byte) error {
-	st := string(b)
-	if st[0] == '"' {
-		*e = Transport(TransportByName[st[1:len(st)-1]])
-		return nil
-	}
-	i, err := strconv.Atoi(st)
-	*e = Transport(i)
-	return err
-}
 
 type Gene struct {
 	Value int32 `thrift:"1,required" json:"value"`
@@ -74,9 +26,19 @@ type Timestamp struct {
 	Sec int32 `thrift:"1,required" json:"sec"`
 }
 
-type Hello struct {
+type ConnectSYN struct {
+	NodeID string `thrift:"1,required" json:"NodeID"`
+}
+
+type HelloSYN struct {
 	Version string `thrift:"1,required" json:"Version"`
 	NodeID string `thrift:"2,required" json:"NodeID"`
+}
+
+type HelloSYNACK struct {
+	Version string `thrift:"1,required" json:"Version"`
+	NodeID string `thrift:"2,required" json:"NodeID"`
+	SupportedTransport map[Common.Transport]int32 `thrift:"3,required" json:"SupportedTransport"`
 }
 
 type News struct {
@@ -93,36 +55,60 @@ type RPCClient interface {
 }
 
 type RemoteRpc interface {
-	Hi(H *Hello) (*Hello, error)
+	Connect(C *ConnectSYN) (bool, error)
+	Hello(H *HelloSYN) (*HelloSYNACK, error)
 }
 
 type RemoteRpcServer struct {
 	Implementation RemoteRpc
 }
 
-func (s *RemoteRpcServer) Hi(req *RemoteRpcHiRequest, res *RemoteRpcHiResponse) error {
-	val, err := s.Implementation.Hi(req.H)
+func (s *RemoteRpcServer) Connect(req *RemoteRpcConnectRequest, res *RemoteRpcConnectResponse) error {
+	val, err := s.Implementation.Connect(req.C)
 	res.Value = val
 	return err
 }
 
-type RemoteRpcHiRequest struct {
-	H *Hello `thrift:"1,required" json:"h"`
+func (s *RemoteRpcServer) Hello(req *RemoteRpcHelloRequest, res *RemoteRpcHelloResponse) error {
+	val, err := s.Implementation.Hello(req.H)
+	res.Value = val
+	return err
 }
 
-type RemoteRpcHiResponse struct {
-	Value *Hello `thrift:"0,required" json:"value"`
+type RemoteRpcConnectRequest struct {
+	C *ConnectSYN `thrift:"1,required" json:"c"`
+}
+
+type RemoteRpcConnectResponse struct {
+	Value bool `thrift:"0,required" json:"value"`
+}
+
+type RemoteRpcHelloRequest struct {
+	H *HelloSYN `thrift:"1,required" json:"h"`
+}
+
+type RemoteRpcHelloResponse struct {
+	Value *HelloSYNACK `thrift:"0,required" json:"value"`
 }
 
 type RemoteRpcClient struct {
 	Client RPCClient
 }
 
-func (s *RemoteRpcClient) Hi(H *Hello) (*Hello, error) {
-	req := &RemoteRpcHiRequest{
+func (s *RemoteRpcClient) Connect(C *ConnectSYN) (bool, error) {
+	req := &RemoteRpcConnectRequest{
+		C: C,
+	}
+	res := &RemoteRpcConnectResponse{}
+	err := s.Client.Call("Connect", req, res)
+	return res.Value, err
+}
+
+func (s *RemoteRpcClient) Hello(H *HelloSYN) (*HelloSYNACK, error) {
+	req := &RemoteRpcHelloRequest{
 		H: H,
 	}
-	res := &RemoteRpcHiResponse{}
-	err := s.Client.Call("hi", req, res)
+	res := &RemoteRpcHelloResponse{}
+	err := s.Client.Call("Hello", req, res)
 	return res.Value, err
 }

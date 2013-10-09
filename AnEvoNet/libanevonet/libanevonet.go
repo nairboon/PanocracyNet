@@ -8,7 +8,7 @@ import (
 	log "github.com/golang/glog"
 	"github.com/samuel/go-thrift/thrift"
 	zmq "libzmqthrift"
-	"net"
+	//"net"
 )
 
 /* client side connection to the daemon */
@@ -42,13 +42,13 @@ func (*AnEvoConnection) ContinueRunning(dna Common.P2PDNA) bool {
 	return true
 }
 
-func (a *AnEvoConnection) Bootstrap() []*Common.Peer {
-	var peers []*Common.Peer
+func (a *AnEvoConnection) Bootstrap() ([]*Common.Peer, error) {
+
 	r, err := a.Rpc.BootstrapAlgorithm()
 	if err != nil {
-		return peers
+		return nil, err
 	}
-	return r.Peers
+	return r.Peers, nil
 }
 
 func (a *AnEvoConnection) GetPeerConnection(p *Common.Peer) zmq.RPCClient {
@@ -58,24 +58,28 @@ func (a *AnEvoConnection) GetPeerConnection(p *Common.Peer) zmq.RPCClient {
 	}
 
 	// make a new connection
-	r, err := a.Rpc.RequestConnection(&rpc.ConnectionReq{Target: p})
+	r, err := a.Rpc.RequestConnection(&rpc.ConnectionReq{Target: p, Module: a.Name})
 	if err != nil {
 		panic(err)
 	}
 
-	conn, err := net.Dial("unix", r.Socket)
+	/*conn, err := net.Dial("unix", r.Socket)
 	if err != nil {
 		panic(err)
 	}
 
 	client := thrift.NewClient(thrift.NewFramedReadWriteCloser(conn, 0), thrift.NewBinaryProtocol(true, false), false)
+	*/
+
+	z := zmq.NewZMQUnixConnection(r.Socket)
+	client := thrift.NewClient(thrift.NewFramedReadWriteCloser(z, 0), thrift.NewBinaryProtocol(false, false), false)
 
 	return client
 }
 
-func (a *AnEvoConnection) RegisterModule(name string, rootdna Common.P2PDNA, dna *Common.P2PDNA) string {
-	log.Infof("Register Module: %s", name)
-	r, err := a.Rpc.RegisterModule(&rpc.Module{Name: name, DNA: &rootdna})
+func (a *AnEvoConnection) Register(rootdna Common.P2PDNA, dna *Common.P2PDNA) string {
+	log.Infof("Register Module: %s", a.Name)
+	r, err := a.Rpc.RegisterModule(&rpc.Module{Name: a.Name, DNA: &rootdna})
 	if err != nil {
 		panic(err)
 	}
@@ -84,7 +88,7 @@ func (a *AnEvoConnection) RegisterModule(name string, rootdna Common.P2PDNA, dna
 	return r.Socket
 }
 
-func NewConnection(name string) *AnEvoConnection {
+func NewModule(name string) *AnEvoConnection {
 	c := &AnEvoConnection{}
 	var port int
 	flag.IntVar(&port, "port", 9000, "port of the daemon")

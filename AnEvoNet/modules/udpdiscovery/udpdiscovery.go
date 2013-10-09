@@ -99,7 +99,7 @@ func main() {
 			}
 			log.Infoln("done", err)
 		}
-		time.Sleep(1000 * time.Millisecond)
+		time.Sleep(1500 * time.Millisecond)
 	}
 	fmt.Println("stopping discovery")
 

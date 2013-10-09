@@ -107,7 +107,7 @@ func (c *RemoteConnection) Connect() error {
 	client := thrift.NewClient(thrift.NewFramedReadWriteCloser(conn, 0), thrift.NewBinaryProtocol(true, false), false)
 	p2p := erpc.RemoteRpcClient{client}
 
-	hi := erpc.Hello{NodeID: c.Us.ID.ID}
+	hi := erpc.Hello{NodeID: c.Us.ID.ID, Version: Common.VERSION}
 	res, err := p2p.Hi(&hi)
 	if err != nil {
 		log.Error(err)
@@ -123,11 +123,15 @@ type OutboundData struct {
 
 type OutboundDataChannel chan OutboundData
 
+type PeerRConnection struct {
+	Peer       *Common.Peer
+	Connection *RemoteConnection
+}
 type Anevonet struct {
 	Engine      *xorm.Engine
 	Modules     map[string]*Module
 	Services    map[string]*irpc.Service
-	Connections map[*Common.Peer]*RemoteConnection
+	Connections map[string]*PeerRConnection // peerid as key
 	// Tunnels data from module specific socket to the remote peer
 	Tunnels           map[*Common.Peer]*LocalConnection
 	OnlinePeers       map[*Common.Peer]bool
@@ -188,11 +192,17 @@ func (a *Anevonet) ShutdownConnection(req *irpc.ConnectionRes) error {
 }
 
 func (a *Anevonet) AddRemotePeer(p *Common.Peer, c *RemoteConnection) error {
-	if _, ok := a.Connections[p]; ok {
+	if _, ok := a.Connections[p.ID]; ok {
 		return errors.New("Peer already registered")
 	}
-	a.Connections[p] = c
+	a.Connections[p.ID] = &PeerRConnection{Peer: p, Connection: c}
+	log.Infof("Added %s-%s:%d --- %d\n", p.ID, p.IP, p.Port, len(a.Connections))
 	return nil
+}
+
+func (a *Anevonet) ConnectedToPeer(p *Common.Peer) bool {
+	_, ok := a.Connections[p.ID]
+	return ok
 }
 
 func (a *Anevonet) ConnectRemotePeer(p *Common.Peer) error {
@@ -212,8 +222,12 @@ func (a *Anevonet) BootstrapAlgorithm() (*irpc.BootstrapRes, error) {
 
 func (a *Anevonet) BootstrapNetwork(peer *Common.Peer) (bool, error) {
 	log.Infof("BootstrapNetwork (%d)\n", peer.Port)
+	if a.ConnectedToPeer(peer) {
+		log.Infof("We're already conntected to (%d)\n", peer.Port)
+		return true, nil
+	}
 	err := a.ConnectRemotePeer(peer)
-	if err != nil {
+	if err == nil {
 		return true, err
 	} else {
 		return false, err
@@ -297,7 +311,7 @@ type P2PRPCServer struct {
 
 func (s *P2PRPCServer) Hi(hello *erpc.Hello) (*erpc.Hello, error) {
 	log.Infof("Hello from %s\n", hello.Version)
-	resp := erpc.Hello{NodeID: s.ae.ID.ID}
+	resp := erpc.Hello{NodeID: s.ae.ID.ID, Version: Common.VERSION}
 	return &resp, nil
 }
 
@@ -338,7 +352,7 @@ func main() {
 	d, _ := filepath.Abs(dir)
 	a := Anevonet{Dir: d, Modules: make(map[string]*Module),
 		Tunnels:     make(map[*Common.Peer]*LocalConnection),
-		Connections: make(map[*Common.Peer]*RemoteConnection),
+		Connections: make(map[string]*PeerRConnection),
 		ID:          Common.Peer{Port: int32(p2pport), ID: "JAJAJAJAJAJ"}}
 
 	engine, err := xorm.NewEngine("sqlite3", dir+"/anevonet.db")

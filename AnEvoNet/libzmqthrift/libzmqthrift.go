@@ -145,7 +145,7 @@ func FixUnixSocketPath(p string) string {
 
 		fd := f.Fd()
 
-		np := fmt.Sprintf("/proc/self/fdc/%d/%s", fd, base)
+		np := fmt.Sprintf("/proc/self/fd/%d/%s", fd, base)
 		return np
 	} else {
 		return p
@@ -161,9 +161,10 @@ func NewZMQUnixConnection(path string) *ZmqConnection {
 		panic(err)
 	}
 
-	identity := fmt.Sprintf("%s -%04X", path, rand.Intn(0x10000))
-	c.Sock.SetIdentity(identity)
 	fp := FixUnixSocketPath(path)
+	identity := fmt.Sprintf("%s -%04X", fp, rand.Intn(0x10000))
+	c.Sock.SetIdentity(identity)
+
 	log.Infof("We are %s on %s", identity, fp)
 	err = c.Sock.Connect(fmt.Sprintf("ipc://%s", fp))
 	if err != nil {

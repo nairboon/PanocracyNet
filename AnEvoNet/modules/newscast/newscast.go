@@ -79,6 +79,7 @@ func (n *Newscast) ActiveThread() {
 		c, err := n.Con.GetPeerConnection(peer)
 		if err != nil {
 			log.Printf("could not get peer connectin :/")
+			time.Sleep(time.Duration(n.DNA["sleep"]) * time.Millisecond * 500)
 			continue
 		}
 		pc := proto.NewscastClient{c}
@@ -87,6 +88,7 @@ func (n *Newscast) ActiveThread() {
 		if err != nil {
 			panic(err)
 		}
+		log.Printf("updating state...")
 		n.UpdateState(recstate)
 		time.Sleep(time.Duration(n.DNA["sleep"]) * time.Millisecond)
 	}

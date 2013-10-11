@@ -6,7 +6,7 @@ import (
 
 	"flag" //flag "github.com/ogier/pflag"
 	log "github.com/golang/glog"
-	"github.com/samuel/go-thrift/thrift"
+	//"github.com/samuel/go-thrift/thrift"
 	zmq "libzmqthrift"
 	//"net"
 )
@@ -72,8 +72,8 @@ func (a *AnEvoConnection) GetPeerConnection(p *Common.Peer) (zmq.RPCClient, erro
 	*/
 	log.Infof("Connecting to socket %s", r.Socket)
 	z := zmq.NewZMQUnixConnection(r.Socket)
-	client := thrift.NewClient(thrift.NewFramedReadWriteCloser(z, 0), thrift.NewBinaryProtocol(false, false), false)
-
+	//client := thrift.NewClient(thrift.NewFramedReadWriteCloser(z, 0), thrift.NewBinaryProtocol(false, false), false)
+	client := z.NewThriftClient()
 	return client, nil
 }
 

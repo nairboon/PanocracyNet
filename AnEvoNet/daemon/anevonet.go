@@ -71,7 +71,7 @@ import (
 	"os/signal"
 	erpc "p2p_rpc"
 	"path/filepath"
-	"strings"
+	//"strings"
 )
 
 type Module struct {
@@ -90,12 +90,12 @@ type LocalConnection struct {
 
 func (c *LocalConnection) Listen() error {
 	server, _ := zmq3.NewSocket(zmq3.REP)
-	defer server.Close()
+
 	fp := zmq.FixUnixSocketPath(c.Socket)
 	err := server.Bind(fmt.Sprintf("ipc://%s", fp))
 
 	if err != nil {
-		log.Error("cannot listen on socket", err)
+		log.Errorf("cannot listen on socket: %s", err)
 		return err
 	}
 	log.Infof("Listening on %s\n", fp)
@@ -103,20 +103,29 @@ func (c *LocalConnection) Listen() error {
 		for {
 			//log.Info("waiting for data..")
 			// The DEALER socket gives us the reply envelope and message
-			msg, _ := server.RecvMessage(0)
-			/*msg, err := worker.RecvMessage(zmq3.DONTWAIT)
+			//msg, _ := server.RecvMessage(0)
+			//msg, err := server.RecvMessage(0)
+			msg, err := server.Recv(0)
+			//fmt.Println("Received ", msg)
 			if err != nil {
-			continue
-			}*/
-			identity, content := pop(msg)
+				//log.Error(err)
+				//break
+				continue
+			}
 
-			log.Infof("recv msg from %s: %s\n", identity, content)
-			out := OutboundData{Target: c.Target, Module: c.Module, Data: []byte(strings.Join(content, ""))}
-			c.Out <- out
+			identity, _ := server.GetIdentity()
+			//content := msg[0]
+			//identity, content := pop(msg)
+
+			log.Infof("recv msg from %s: %s\n", identity, msg)
+			// TODO: wait for response
+			//out := OutboundData{Target: c.Target, Module: c.Module, Data: []byte(strings.Join(content, ""))}
+			//c.Out <- out
 			//log.Infof("sending back to (%s) (%d): %s\n", identity, len(res), res)
-			server.SendMessage(identity, "ACK")
+			server.Send("ACK", 0)
 			//log.Info("done sending!!!")
 		}
+		defer server.Close()
 	}()
 	return nil
 }

@@ -51,16 +51,16 @@ func (a *AnEvoConnection) Bootstrap() ([]*Common.Peer, error) {
 	return r.Peers, nil
 }
 
-func (a *AnEvoConnection) GetPeerConnection(p *Common.Peer) zmq.RPCClient {
+func (a *AnEvoConnection) GetPeerConnection(p *Common.Peer) (zmq.RPCClient, error) {
 	// are we already connected to that peer?
 	if val, ok := a.Connections[p]; ok {
-		return val
+		return val, nil
 	}
 
 	// make a new connection
 	r, err := a.Rpc.RequestConnection(&rpc.ConnectionReq{Target: p, Module: a.Name})
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	/*conn, err := net.Dial("unix", r.Socket)
@@ -70,11 +70,11 @@ func (a *AnEvoConnection) GetPeerConnection(p *Common.Peer) zmq.RPCClient {
 
 	client := thrift.NewClient(thrift.NewFramedReadWriteCloser(conn, 0), thrift.NewBinaryProtocol(true, false), false)
 	*/
-
+	log.Infof("Connecting to socket %s", r.Socket)
 	z := zmq.NewZMQUnixConnection(r.Socket)
 	client := thrift.NewClient(thrift.NewFramedReadWriteCloser(z, 0), thrift.NewBinaryProtocol(false, false), false)
 
-	return client
+	return client, nil
 }
 
 func (a *AnEvoConnection) Register(rootdna Common.P2PDNA, dna *Common.P2PDNA) string {

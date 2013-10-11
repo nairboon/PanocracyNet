@@ -76,7 +76,12 @@ func (n *Newscast) ActiveThread() {
 		}
 		// select Peer
 		peer := n.State.NewsItems[r.Intn(len(n.State.NewsItems))].Agent
-		pc := proto.NewscastClient{n.Con.GetPeerConnection(peer)}
+		c, err := n.Con.GetPeerConnection(peer)
+		if err != nil {
+			log.Printf("could not get peer connectin :/")
+			continue
+		}
+		pc := proto.NewscastClient{c}
 		log.Printf("going to gossip...")
 		recstate, err := pc.ExchangeState(n.State)
 		if err != nil {

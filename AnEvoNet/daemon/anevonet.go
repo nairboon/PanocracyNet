@@ -85,36 +85,39 @@ type LocalConnection struct {
 	Socket string
 	Module string
 	Target *Common.Peer
-	Out    *OutboundDataChannel
+	Out    OutboundDataChannel
 }
 
 func (c *LocalConnection) Listen() error {
 	server, _ := zmq3.NewSocket(zmq3.REP)
 	defer server.Close()
-	err := server.Bind(fmt.Sprintf("ipc://%s", zmq.FixUnixSocketPath(c.Socket)))
+	fp := zmq.FixUnixSocketPath(c.Socket)
+	err := server.Bind(fmt.Sprintf("ipc://%s", fp))
+
 	if err != nil {
-		log.Error(err)
+		log.Error("cannot listen on socket", err)
 		return err
 	}
+	log.Infof("Listening on %s\n", fp)
+	go func() {
+		for {
+			//log.Info("waiting for data..")
+			// The DEALER socket gives us the reply envelope and message
+			msg, _ := server.RecvMessage(0)
+			/*msg, err := worker.RecvMessage(zmq3.DONTWAIT)
+			if err != nil {
+			continue
+			}*/
+			identity, content := pop(msg)
 
-	for {
-		//log.Info("waiting for data..")
-		// The DEALER socket gives us the reply envelope and message
-		msg, _ := server.RecvMessage(0)
-		/*msg, err := worker.RecvMessage(zmq3.DONTWAIT)
-		if err != nil {
-		continue
-		}*/
-		identity, content := pop(msg)
-
-		log.Infof("recv msg from %s: %s\n", identity, content)
-		out := OutboundData{Target: c.Target, Module: c.Module, Data: []byte(strings.Join(content, ""))}
-		*c.Out <- out
-		//log.Infof("sending back to (%s) (%d): %s\n", identity, len(res), res)
-		server.SendMessage(identity, "ACK")
-		//log.Info("done sending!!!")
-	}
-
+			log.Infof("recv msg from %s: %s\n", identity, content)
+			out := OutboundData{Target: c.Target, Module: c.Module, Data: []byte(strings.Join(content, ""))}
+			c.Out <- out
+			//log.Infof("sending back to (%s) (%d): %s\n", identity, len(res), res)
+			server.SendMessage(identity, "ACK")
+			//log.Info("done sending!!!")
+		}
+	}()
 	return nil
 }
 
@@ -122,6 +125,7 @@ type RemoteConnection struct {
 	Peer       *Common.Peer
 	Us         *Anevonet
 	Connection *net.Conn
+	Out        OutboundDataChannel
 }
 
 func (c *RemoteConnection) Connect() error {
@@ -178,6 +182,19 @@ type Anevonet struct {
 	ExternalRPCServer *rpc.Server
 }
 
+func (a *Anevonet) Proxy() {
+	log.Infof("proxy \n")
+	//var d OutboundData
+	for {
+		select {
+		case d := <-a.Outbound:
+			log.Infof("Sending:", d)
+
+		}
+	}
+
+}
+
 func (a *Anevonet) RegisterModule(module *irpc.Module) (*irpc.RegisterRes, error) {
 	if _, ok := a.Modules[module.Name]; ok {
 		return nil, errors.New("module already registered")
@@ -202,6 +219,13 @@ func (a *Anevonet) RegisterService(s *irpc.Service) (bool, error) {
 
 func (a *Anevonet) RequestConnection(req *irpc.ConnectionReq) (*irpc.ConnectionRes, error) {
 	log.Infof("RequestConnection\n")
+
+	// connect to peer
+	ok, _ := a.BootstrapNetwork(req.Target)
+	if !ok {
+		return nil, errors.New("Cannot Connect to peer")
+	}
+
 	// TODO: what if multiple modules access the same peer?
 	// check if we're already connected
 	if _, ok := a.Tunnels[req.Target]; ok {
@@ -213,10 +237,15 @@ func (a *Anevonet) RequestConnection(req *irpc.ConnectionReq) (*irpc.ConnectionR
 	if err != nil {
 		log.Fatal(err)
 	}
-	s := &LocalConnection{Module: req.Module, Target: req.Target, Socket: basepath + fmt.Sprintf("%s-%d", req.Target.IP, req.Target.Port)}
+	s := &LocalConnection{Module: req.Module, Target: req.Target, Socket: basepath + fmt.Sprintf("%s-%d", req.Target.IP, req.Target.Port),
+		Out: a.Connections[req.Target.ID].Connection.Out}
 	a.Tunnels[req.Target] = s
-	s.Out = &a.Outbound
-	go s.Listen()
+	s.Out = a.Outbound
+	// Listen locally for modules sending data
+	err = s.Listen()
+	if err != nil {
+		return nil, errors.New("Cannot listen on local socket")
+	}
 
 	res := &irpc.ConnectionRes{Socket: s.Socket}
 	return res, nil
@@ -245,6 +274,7 @@ func (a *Anevonet) ConnectedToPeer(p *Common.Peer) bool {
 func (a *Anevonet) ConnectRemotePeer(p *Common.Peer) error {
 	c := &RemoteConnection{Peer: p, Us: a}
 	return c.Connect()
+
 }
 
 func (a *Anevonet) Status() (*irpc.StatusRes, error) {
@@ -415,7 +445,8 @@ func main() {
 		Connections:      make(map[string]*PeerRConnection),
 		_rnd_Connections: make(map[int]string),
 		Transports:       make(map[Common.Transport]int32),
-		ID:               Common.Peer{Port: int32(p2pport), ID: "JAJAJAJAJAJ"}}
+		ID:               Common.Peer{Port: int32(p2pport), ID: "JAJAJAJAJAJ"},
+		Outbound:         make(OutboundDataChannel)}
 
 	engine, err := xorm.NewEngine("sqlite3", dir+"/anevonet.db")
 	defer engine.Close()
@@ -426,6 +457,7 @@ func main() {
 
 	go a.InternalRPC(backendport)
 	go a.P2PRPC(int32(p2pport))
+	go a.Proxy()
 	// read config file
 	// open database
 

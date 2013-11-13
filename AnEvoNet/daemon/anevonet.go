@@ -168,7 +168,7 @@ type OutboundData struct {
 }
 
 type OutboundDataChannel chan OutboundData
-
+type QuitChannel chan bool
 type PeerRConnection struct {
 	Peer       *Common.Peer
 	Connection *RemoteConnection
@@ -333,22 +333,28 @@ func pop(msg []string) (head, tail []string) {
 // Each worker task works on one request at a time and sends a random number
 // of replies back, with random delays between replies:
 
-func (a *Anevonet) InternalRPCWorker() {
+func (a *Anevonet) InternalRPCWorker(quit QuitChannel) {
 
 	worker, _ := zmq3.NewSocket(zmq3.DEALER)
 	defer worker.Close()
 	worker.Connect("inproc://backend")
 
 	for {
-		//log.Info("waiting for data..")
+		select {
+		case <-quit:
+			return
+		default:
+
+		}
+		log.Info("waiting for data..")
 		// The DEALER socket gives us the reply envelope and message
-		msg, _ := worker.RecvMessage(0)
-		/*msg, err := worker.RecvMessage(zmq3.DONTWAIT)
+		msg, err := worker.RecvMessage(0)
+		/*msg, err := worker.RecvMessage(zmq3.DONTWAIT)*/
 		if err != nil {
-		continue
-		}*/
+			continue
+		}
 		identity, content := pop(msg)
-		//log.Infof("recv msg from %s: %s\n", identity, content)
+		log.Infof("recv msg from %s: %s\n", identity, content)
 		r := zmq.ThriftZMQChannel{}
 		//c := make(chan []byte, 5)
 
@@ -363,29 +369,45 @@ func (a *Anevonet) InternalRPCWorker() {
 		//log.Infof("sending back to (%s) (%d): %s\n", identity, len(res), res)
 		worker.SendMessage(identity, res)
 		//log.Info("done sending!!!")
+
 	}
 }
 
-func (a *Anevonet) InternalRPC(port int) {
+func (a *Anevonet) InternalRPC(port int, quit QuitChannel) {
 	a.InternalRPCServer = rpc.NewServer()
 	a.InternalRPCServer.RegisterName("Thrift", &irpc.InternalRpcServer{a})
 
-	frontend := zmq.NewZMQConnection("Daemon", port, zmq.Server)
-
+	frontend, err := zmq.NewZMQConnection("Daemon", port, zmq.Server)
+	defer frontend.Close()
+	if err != nil {
+		log.Fatalln("Cannot bind frontend:", err)
+	}
 	// Backend socket talks to workers over inproc
 	backend, _ := zmq3.NewSocket(zmq3.DEALER)
 	defer backend.Close()
-	backend.Bind("inproc://backend")
-
+	err = backend.Bind("inproc://backend")
+	if err != nil {
+		log.Fatalln("Cannot bind backend:", err)
+	}
 	// Launch pool of worker threads, precise number is not critical
 	for i := 0; i < 2; i++ {
-		go a.InternalRPCWorker()
+		go a.InternalRPCWorker(quit)
 	}
-	var err error
+
 	// Connect backend to frontend via a proxy
+	log.Infof("Start Proxy\n")
 	for err != errors.New("interrupted system call") {
 		err = zmq3.Proxy(frontend.Sock, backend, nil)
 		log.Errorln("Proxy interrupted:", err)
+		select {
+		case <-quit:
+			for i := 0; i < 2; i++ {
+				quit <- true
+			}
+			return
+		default:
+
+		}
 	}
 	log.Fatalln("Proxy errord:", err)
 }
@@ -463,8 +485,8 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-
-	go a.InternalRPC(backendport)
+	quit := make(chan bool)
+	go a.InternalRPC(backendport, quit)
 	go a.P2PRPC(int32(p2pport))
 	go a.Proxy()
 	// read config file
@@ -482,7 +504,9 @@ func main() {
 	for _ = range c {
 		break
 	}
-
+	quit <- true
 	log.Info("stopping anevonet daemon\n")
+	defer zmq3.Term()
+
 	log.Flush()
 }

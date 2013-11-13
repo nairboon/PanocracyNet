@@ -39,9 +39,9 @@ simulation:
 	gd -o simulation/sim simulation
 
 test:	daemon library
-	killall daemon
+	-killall -q daemon
 	./bin/daemon &
 	gd -I protocol -I libzmqthrift -t libanevonet
-
+	-killall -q daemon
 
 .PHONY: protocol daemon launcher library modules simulation test

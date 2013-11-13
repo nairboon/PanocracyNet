@@ -3,7 +3,7 @@ package libanevonet
 import (
 	"Common"
 	rpc "anevonet_rpc"
-
+	//"errors"
 	"flag" //flag "github.com/ogier/pflag"
 	log "github.com/golang/glog"
 	//"github.com/samuel/go-thrift/thrift"
@@ -93,11 +93,17 @@ func (a *AnEvoConnection) Register(rootdna Common.P2PDNA, dna *Common.P2PDNA) (s
 	return r.Socket, nil
 }
 
+var flagSet = false
+var port int
+
 func NewModule(name string) (*AnEvoConnection, error) {
 	c := &AnEvoConnection{}
-	var port int
-	flag.IntVar(&port, "port", 9000, "port of the daemon")
-	flag.Parse()
+	if !flagSet {
+
+		flag.IntVar(&port, "port", 9000, "port of the daemon")
+		flag.Parse()
+		flagSet = true
+	}
 	c.Name = name
 	err := c.Connect(port)
 

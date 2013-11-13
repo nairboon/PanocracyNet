@@ -124,8 +124,8 @@ func main() {
 	log.Printf("newscasting")
 
 	nc := Newscast{}
-	nc.Con = ae.NewModule("Newscast")
-	socket := nc.Con.Register(proto.RootDNA, &nc.DNA)
+	nc.Con, _ = ae.NewModule("Newscast")
+	socket, _ := nc.Con.Register(proto.RootDNA, &nc.DNA)
 	nc.State = &proto.PeerState{}
 
 	_ = socket

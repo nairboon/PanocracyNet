@@ -29,13 +29,17 @@ type AnEvoConnection struct {
 	Connections map[*Common.Peer]zmq.RPCClient
 }
 
-func (a *AnEvoConnection) Connect(port int) {
+func (a *AnEvoConnection) Connect(port int) error {
 	log.Infof("Connecting on: %d", port)
-	a.Client.Zmq = zmq.NewZMQConnection(a.Name, port, zmq.Client)
-
+	var err error
+	a.Client.Zmq, err = zmq.NewZMQConnection(a.Name, port, zmq.Client)
+	if err != nil {
+		return err
+	}
 	client := a.Client.Zmq.NewThriftClient()
 
 	a.Rpc = rpc.InternalRpcClient{client}
+	return nil
 }
 
 func (*AnEvoConnection) ContinueRunning(dna Common.P2PDNA) bool {
@@ -77,24 +81,25 @@ func (a *AnEvoConnection) GetPeerConnection(p *Common.Peer) (zmq.RPCClient, erro
 	return client, nil
 }
 
-func (a *AnEvoConnection) Register(rootdna Common.P2PDNA, dna *Common.P2PDNA) string {
+func (a *AnEvoConnection) Register(rootdna Common.P2PDNA, dna *Common.P2PDNA) (string, error) {
 	log.Infof("Register Module: %s", a.Name)
 	r, err := a.Rpc.RegisterModule(&rpc.Module{Name: a.Name, DNA: &rootdna})
+	log.Infof("done registering")
 	if err != nil {
-		panic(err)
+		return "", err
 	}
 	// check db for better dna
 	dna = r.DNA
-	return r.Socket
+	return r.Socket, nil
 }
 
-func NewModule(name string) *AnEvoConnection {
+func NewModule(name string) (*AnEvoConnection, error) {
 	c := &AnEvoConnection{}
 	var port int
 	flag.IntVar(&port, "port", 9000, "port of the daemon")
 	flag.Parse()
 	c.Name = name
-	c.Connect(port)
+	err := c.Connect(port)
 
-	return c
+	return c, err
 }

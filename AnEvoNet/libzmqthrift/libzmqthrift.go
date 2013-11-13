@@ -41,8 +41,8 @@ func (z *ZmqConnection) Read(buf []byte) (int, error) {
 		msg, err := z.Sock.RecvMessage(zmq.DONTWAIT)
 
 		if err == nil {
-			//id, _ := z.Sock.GetIdentity()
-			//fmt.Printf("%s, recieved %d parts: %s", id, len(msg), msg[0])
+			id, _ := z.Sock.GetIdentity()
+			fmt.Printf("%s, recieved %d parts: %s", id, len(msg), msg[0])
 			for _, part := range msg {
 				z.readbuf.WriteString(part)
 			}
@@ -71,7 +71,7 @@ func (z *ZmqConnection) Write(buf []byte) (n int, err error) {
 }
 func (z *ZmqConnection) Send() {
 	z.mu.Lock()
-	//fmt.Printf("sending: %s\n", z.outbuf.String())
+	fmt.Printf("sending: %s\n", z.outbuf.String())
 	z.Sock.SendMessage(z.outbuf.String())
 	z.outbuf.Reset()
 	z.mu.Unlock()
@@ -106,13 +106,13 @@ func (z *ZmqConnection) NewThriftClient() RPCClient {
 	return client
 }
 
-func NewZMQConnection(name string, port int, t zmq.Type) *ZmqConnection {
+func NewZMQConnection(name string, port int, t zmq.Type) (*ZmqConnection, error) {
 	c := &ZmqConnection{}
 	var err error
 
 	c.Sock, err = zmq.NewSocket(t)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	if t == Server {
 		c.Sock.SetIdentity("DAEMON")
@@ -123,15 +123,11 @@ func NewZMQConnection(name string, port int, t zmq.Type) *ZmqConnection {
 		log.Infof("We are %s", identity)
 		err = c.Sock.Connect(fmt.Sprintf("tcp://localhost:%d", port))
 		if err != nil {
-			panic(err)
+			return nil, err
 		}
 	}
 
-	if err != nil {
-		panic(err)
-	}
-
-	return c
+	return c, err
 }
 
 // http://openvswitch.org/pipermail/dev/2010-November/004456.html

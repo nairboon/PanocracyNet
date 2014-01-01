@@ -1,17 +1,18 @@
 PanocracyNet
 ============
 
-The goal of this project is to design a software system that follows the principles of a [Panocracy society](http://en.panokratie.net/).
-
-######AnEvoNet
-A self evolving p2p system that adaptively chooses different algorithms for different use cases.
-
-######PeerDB
-A simple document based database which is replicated on the network
+This is a hub for software projects, with the aim to decentralize and distribute our communication infrastucture.
 
 
-######P2P-Passport
-User authentication system based on GPG
+###AnEvoNet
+A self evolving p2p system that adaptively chooses different algorithms for different use cases. 
+The network has self-healing capabilities: with the SLACER algorithm, the behaviour of freeriders would be copied by its connected peers, thus behave self-desctructing until mutual service collapses. After that the non-malicious peers would continue the last working strategy. 
 
-######PanocracyNet.UI.js
-A javascript library that connects to a panocracynet peer and handles provides interfaces for PeerDB & P2P-Passport.
+##### What does work so far?
+Clients using the Golang client library use local udp peer discovery and form a network. Currently the only algorithm in use is newscast gossip.
+
+#### Architecture
+"Clients"/modules connect to a local daemon through ZeroMQ and communicate according to a thrift rpc-protocol. They can export their own rpc-api as a thrift protocol, which is then tunneled over the local daemon to a remote daemon.
+
+[Read More](https://github.com/nairboon/PanocracyNet/blob/develop/AnEvoNet/README.md)
+

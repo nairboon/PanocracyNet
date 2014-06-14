@@ -28,10 +28,11 @@ for i := 0; i < n; i++ {
         rpcportflag := fmt.Sprintf("--rpc-port=%d", rpcport + i)
         p2pportflag := fmt.Sprintf("--p2p-port=%d", p2pport + i)
 	dirflag := fmt.Sprintf("--dir=peer%d", i)
+		idflag := fmt.Sprintf("--id=peerID%d", i)
 	filename, _ := osext.Executable()
 	wd := path.Dir(filename)
 
-	peer := exec.Command(wd+"/../bin/launcher", rpcportflag, p2pportflag, dirflag)
+	peer := exec.Command(wd+"/../bin/launcher", rpcportflag, p2pportflag, dirflag,idflag)
 	peer.Stdout = os.Stdout
 	peer.Stderr = os.Stderr
 	err := peer.Start()

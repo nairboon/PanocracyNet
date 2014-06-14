@@ -72,6 +72,7 @@ import (
 	erpc "p2p_rpc"
 	"path/filepath"
 	//"strings"
+	"time"
 )
 
 type Module struct {
@@ -214,6 +215,12 @@ func (a *Anevonet) RegisterModule(module *irpc.Module) (*irpc.RegisterRes, error
 	m := &Module{Name: module.Name, DNA: module.DNA, Socket: a.Dir + "/sockets/modules/" + module.Name}
 	a.Modules[module.Name] = m
 
+	basepath := a.Dir + "/sockets/modules/"
+	err := os.MkdirAll(basepath, 0766)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	res := &irpc.RegisterRes{DNA: m.DNA, Socket: m.Socket}
 	return res, nil
 }
@@ -292,14 +299,17 @@ func (a *Anevonet) Status() (*irpc.StatusRes, error) {
 }
 
 func (a *Anevonet) BootstrapAlgorithm() (*irpc.BootstrapRes, error) {
-	log.Infof("BootstrapAlgorithm\n")
+	log.Infof("BootstrapAlgorithm %v\n", a.ID)
 
 	if len(a.Connections) < 1 {
+		log.Infof("BootstrapAlgorithm: we have %d connections...\n", len(a.Connections))
 		return &irpc.BootstrapRes{}, nil
 	} else {
 		//pick random connection
+
 		nC := rand.Intn(len(a._rnd_Connections))
 		id := a._rnd_Connections[nC]
+		log.Infof("BootstrapAlgorithm: pick random connection %v\n", id)
 		var peers = []*Common.Peer{a.Connections[id].Peer}
 		return &irpc.BootstrapRes{Peers: peers}, nil
 	}
@@ -346,7 +356,8 @@ func (a *Anevonet) InternalRPCWorker(quit QuitChannel) {
 		default:
 
 		}
-		log.Info("waiting for data..")
+		//time.Sleep(10*time.Millisecond)
+		//log.Info("waiting for data..")
 		// The DEALER socket gives us the reply envelope and message
 		msg, err := worker.RecvMessage(0)
 		/*msg, err := worker.RecvMessage(zmq3.DONTWAIT)*/
@@ -408,6 +419,8 @@ func (a *Anevonet) InternalRPC(port int, quit QuitChannel) {
 		default:
 
 		}
+		time.Sleep(500 * time.Millisecond)
+
 	}
 	log.Fatalln("Proxy errord:", err)
 }
@@ -461,11 +474,13 @@ func (a *Anevonet) TransportTCP(port int32) {
 var backendport int
 var p2pport int
 var dir string
+var id string
 
 func main() {
 	flag.IntVar(&backendport, "rpc-port", 9000, "port of the local rpc service")
 	flag.IntVar(&p2pport, "p2p-port", 10000, "port of the p2p service")
 	flag.StringVar(&dir, "dir", "anevo", "working directory of anevonet")
+	flag.StringVar(&id, "id", "0000", "peerid")
 	flag.Parse()
 
 	log.Infof("staring daemon on %d and %d in %s\n", backendport, p2pport, dir)
@@ -476,7 +491,7 @@ func main() {
 		Connections:      make(map[string]*PeerRConnection),
 		_rnd_Connections: make(map[int]string),
 		Transports:       make(map[Common.Transport]int32),
-		ID:               Common.Peer{Port: int32(p2pport), ID: "JAJAJAJAJAJ"},
+		ID:               Common.Peer{Port: int32(p2pport), ID: id},
 		Outbound:         make(OutboundDataChannel)}
 
 	engine, err := xorm.NewEngine("sqlite3", dir+"/anevonet.db")

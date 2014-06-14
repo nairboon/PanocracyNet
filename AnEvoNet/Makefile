@@ -1,4 +1,4 @@
-all: library daemon launcher modules
+all: library daemon launcher modules simulation
 gen = $(GOPATH)/bin/generator
 
 protocol: 

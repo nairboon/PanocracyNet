@@ -97,6 +97,7 @@ func (n *Newscast) ActiveThread() {
 
 func (n *Newscast) ExchangeState(state *proto.PeerState) (*proto.PeerState, error) {
 
+	log.Printf("SOMEBODY called ExchangeState %v", state)
 	return n.State, nil
 }
 
@@ -129,7 +130,7 @@ func main() {
 	nc.State = &proto.PeerState{}
 
 	_ = socket
-	//go nc.PassiveThread(socket)
+	go nc.PassiveThread(socket)
 	log.Printf("starting active thread")
 	_, _ = nc.Con.Rpc.Status()
 	go nc.ActiveThread()

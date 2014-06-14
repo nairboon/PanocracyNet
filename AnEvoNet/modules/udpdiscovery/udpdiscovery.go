@@ -46,7 +46,8 @@ func main() {
 		c, err := net.ListenUDP("udp4", addr)
 
 		if err != nil {
-			log.Fatal(err)
+			log.Error(err)
+			return
 		}
 
 		defer c.Close()

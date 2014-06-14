@@ -70,5 +70,5 @@ type Peer struct {
 }
 
 type Timestamp struct {
-	Sec int32 `thrift:"1,required" json:"sec"`
+	Sec int64 `thrift:"1,required" json:"sec"`
 }

@@ -1,4 +1,5 @@
 all: library daemon launcher modules
+gen = $(GOPATH)/bin/generator
 
 protocol: 
 	rm -f protocol/p2p_rpc.go
@@ -6,13 +7,13 @@ protocol:
 	rm -f protocol/anevonet_rpc.go
 	rm -f protocol/Common.go
 	rm -f protocol/anevonet_rpc.go_
-	generator -go.import Common protocol/p2p_rpc.thrift protocol/p2p_rpc.go_
-	sed 's/*Peer/*Common.Peer/' protocol/p2p_rpc.go_ | sed 's/map\[string\]int32/*Common.P2PDNA/'  > protocol/p2p_rpc.go
-	generator -go.import Common protocol/anevonet_rpc.thrift protocol/anevonet_rpc.go_
+	$(gen) -go.import Common protocol/p2p_rpc.thrift protocol/p2p_rpc.go_
+	sed 's/*Peer/*Common.Peer/' protocol/p2p_rpc.go_ | sed 's/map\[string\]int32/*Common.P2PDNA/' | sed 's/map\[Transport\]int32/map\[Common.Transport\]int32/'   > protocol/p2p_rpc.go
+	$(gen) -go.import Common protocol/anevonet_rpc.thrift protocol/anevonet_rpc.go_
 	sed 's/*Peer/*Common.Peer/' protocol/anevonet_rpc.go_ | sed 's/map\[string\]int32/*Common.P2PDNA/'  > protocol/anevonet_rpc.go
 	rm -f protocol/anevonet_rpc.go_
 	rm -f protocol/p2p_rpc.go_
-	generator protocol/Common.thrift protocol/Common.go
+	$(gen) protocol/Common.thrift protocol/Common.go
 	#thrift --gen go -r -out protocol ../../protocol/p2p_meta.thrift
 	#thrift --gen go -r -out protocol ../../protocol/anevonet_rpc.thrift
 	gd protocol
@@ -43,5 +44,18 @@ test:	daemon library
 	./bin/daemon &
 	gd -I protocol -I libzmqthrift -t libanevonet
 	-killall -q daemon
+	
+dependencies:
+	go get github.com/golang/glog
+	go get github.com/lunny/xorm
+	go get bitbucket.org/kardianos/osext
+	go get github.com/ogier/pflag
+	go get github.com/mattn/go-sqlite3
+	go get github.com/pebbe/zmq4
+	go get github.com/nairboon/go-thrift/thrift
+	go get github.com/samuel/go-parser/parser
+	git clone https://github.com/nairboon/go-thrift.git $(GOPATH)/src/github.com/samuel/go-thrift
+	go install github.com/samuel/go-thrift/generator
+	
 
-.PHONY: protocol daemon launcher library modules simulation test
+.PHONY: protocol daemon launcher library modules simulation test dependencies

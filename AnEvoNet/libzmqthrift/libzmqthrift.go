@@ -5,7 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	log "github.com/golang/glog"
-	zmq "github.com/pebbe/zmq3"
+	zmq "github.com/pebbe/zmq4"
 	"github.com/samuel/go-thrift/thrift"
 	"io"
 	"math/rand"
@@ -104,6 +104,7 @@ func (t ThriftZMQChannel) Close() error {
 
 func (z *ZmqConnection) NewThriftClient() RPCClient {
 	client := thrift.NewClient(NewFramedReadWriteCloser(z, 0), thrift.NewBinaryProtocol(false, false), false)
+	//client := thrift.NewClient(thrift.NewTransport(NewFramedReadWriteCloser(z, 0), thrift.BinaryProtocol), false)
 
 	return client
 }

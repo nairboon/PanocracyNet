@@ -61,7 +61,7 @@ import (
 	"fmt"
 	"github.com/lunny/xorm"
 	_ "github.com/mattn/go-sqlite3"
-	zmq3 "github.com/pebbe/zmq3"
+	zmq3 "github.com/pebbe/zmq4"
 	"github.com/samuel/go-thrift/thrift"
 	zmq "libzmqthrift"
 	"math/rand"

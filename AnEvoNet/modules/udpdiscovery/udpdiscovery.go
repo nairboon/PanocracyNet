@@ -27,7 +27,7 @@ import (
 func main() {
 	log.Info("discovering over udp")
 
-	con := ae.NewModule("UDPDiscovery")
+	con, _ := ae.NewModule("UDPDiscovery")
 
 	s, err := con.Rpc.Status()
 	if err != nil {

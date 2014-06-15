@@ -5,6 +5,8 @@ newscast:
 	mkdir -p newscast/newscast_protocol
 	$(gen) -go.import Common newscast/newscast.thirft newscast/newscast_protocol/newscast_protocol.go
 	sed -i -r 's/Agent[ ]\*Peer/Agent \*Common.Peer/' newscast/newscast_protocol/newscast_protocol.go
+	sed -i -r 's/Source[ ]\*Peer/Source \*Common.Peer/' newscast/newscast_protocol/newscast_protocol.go
+
 	gd -I ../protocol -I ../libanevonet -I ../libzmqthrift -I newscast newscast -o ../bin/modules/newscast
 	cd newscast && go fmt
 

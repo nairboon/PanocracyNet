@@ -17,6 +17,10 @@ struct ConnectSYN {
   1: string NodeID,
 }
 
+struct Message {
+	1: string Module,
+	2: string Payload
+}
 
 struct News {
   1: string version = Common.VERSION,
@@ -30,5 +34,7 @@ struct News {
 service remote_rpc {
   HelloSYNACK Hello(1:HelloSYN h),
   bool Connect(1:ConnectSYN c),
+
+  Message SendMessage(1:Message m)
 
 }

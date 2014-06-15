@@ -23,6 +23,8 @@ import (
 	"Common"
 	"fmt"
 	"github.com/samuel/go-thrift/thrift"
+	//"io/ioutil"
+	//"errors"
 	ae "libanevonet"
 	"log"
 	"math/rand"
@@ -40,15 +42,56 @@ type Newscast struct {
 	State *proto.PeerState
 	Con   *ae.AnEvoConnection
 	DNA   Common.P2PDNA
+	We    *proto.CacheEntry
+	ID    *Common.Peer
 }
 
+func AddToPeerState(e *proto.CacheEntry, ps *proto.PeerState) bool {
+	// do we already have this one?
+	have := false
+	log.Printf("trying to merge states %v", e)
+
+	for _, c := range ps.NewsItems {
+		if c.Agent.ID == e.Agent.ID {
+			have = true
+		}
+	}
+	if !have {
+		ps.NewsItems = append(ps.NewsItems, e)
+		log.Printf("we add peer: %s", e.Agent.ID)
+
+	}
+	return !have
+}
 func (n *Newscast) UpdateState(newstate *proto.PeerState) proto.PeerState {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
+	log.Printf("Newscast updateState from %s with: %v", newstate.Source.ID, newstate.NewsItems)
+
 	// check if we need more peers
 	if len(n.State.NewsItems) < int(n.DNA["cachesize"]) {
-		// we should
+		log.Printf("we should add some peers %d < %d", len(n.State.NewsItems), int(n.DNA["cachesize"]))
+
+		// we should add some items from newstate
+		res := false
+		for _, ni := range newstate.NewsItems {
+			res = AddToPeerState(ni, n.State)
+			if len(n.State.NewsItems) >= int(n.DNA["cachesize"]) {
+				break
+			}
+
+			if res {
+				log.Printf("We added a peer!")
+			}
+		}
+		if !res {
+			log.Printf("No peer matched!?!?")
+
+		}
+	} else {
+		log.Printf("we have enough peers (%d) already: %d", len(n.State.NewsItems), int(n.DNA["cachesize"]))
+
 	}
 
 	return *newstate
@@ -84,28 +127,72 @@ func (n *Newscast) ActiveThread() {
 		}
 		pc := proto.NewscastClient{c}
 		log.Printf("going to gossip...")
-		recstate, err := pc.ExchangeState(n.State)
-		if err != nil {
-			panic(err)
+
+		timeout := make(chan bool, 1)
+		ch := make(chan *proto.PeerState, 1)
+
+		go func() {
+			time.Sleep(5 * time.Second)
+			timeout <- true
+		}()
+		go func() {
+			recstate, _ := pc.ExchangeState(n.State)
+			ch <- recstate
+		}()
+		select {
+		case recstate := <-ch:
+			// a read from ch has occurred
+
+			log.Printf("updating state... %+v", recstate)
+
+			/*if err != nil {
+				panic(err)
+			}*/
+			n.UpdateState(recstate)
+			time.Sleep(time.Duration(n.DNA["sleep"]) * time.Millisecond)
+
+		case <-timeout:
+			// the read from ch has timed out
+			log.Printf("timed out")
+			continue
+
 		}
-		log.Printf("updating state...")
-		n.UpdateState(recstate)
-		time.Sleep(time.Duration(n.DNA["sleep"]) * time.Millisecond)
+
 	}
 
 }
 
 func (n *Newscast) ExchangeState(state *proto.PeerState) (*proto.PeerState, error) {
 
-	log.Printf("SOMEBODY called ExchangeState %v", state)
-	return n.State, nil
+	// adding ourselve to the state
+	ns := append(n.State.NewsItems, n.We)
+
+	log.Printf("%s called %+v ExchangeState %v", state.Source.ID, n.We, state.NewsItems)
+	res := &proto.PeerState{Source: n.ID, NewsItems: n.State.NewsItems}
+
+	a := ns
+	b := n.State.NewsItems
+	log.Printf("RES: %#v\n Difference: %+v ---- %+v", res, a, b)
+	res.NewsItems = ns
+
+	n.UpdateState(state)
+
+	//res.Source.ID = "ABCDEFGHIJKLMNM"
+
+	log.Printf("RES222: %+v", res.Source)
+	res.NewsItems = nil
+	return res, nil
+
+	res = &proto.PeerState{Source: n.ID, NewsItems: ns}
+	log.Printf("we (%s) respond: %v", n.ID.ID, res)
+	return res, nil
 }
 
 func (n *Newscast) PassiveThread(socket string) {
 
 	rpc.RegisterName("Thrift", &proto.NewscastServer{n})
 
-	ln, err := net.Listen("unix", socket)
+	ln, err := net.Listen("tcp", socket)
 	if err != nil {
 		panic(err)
 	}
@@ -115,8 +202,16 @@ func (n *Newscast) PassiveThread(socket string) {
 			fmt.Printf("ERROR: %+v\n", err)
 			continue
 		}
-		fmt.Printf("New connection %+v\n", conn)
+		fmt.Printf("New connection in Passive Thread %+v\n", conn)
+		//var re []byte
+		//i, _ := conn.Read(re)
+		//re, _ := ioutil.ReadAll(conn)
 		go rpc.ServeCodec(thrift.NewServerCodec(thrift.NewFramedReadWriteCloser(conn, 0), thrift.NewBinaryProtocol(true, false)))
+		//err = rpc.ServeRequest(thrift.NewServerCodec(thrift.NewFramedReadWriteCloser(conn, 0), thrift.NewBinaryProtocol(true, false)))
+
+		//conn.Close()
+		//fmt.Printf("Done processing with RPC ---------%v----!!!!!!\n", err)
+
 	}
 
 }
@@ -126,10 +221,21 @@ func main() {
 
 	nc := Newscast{}
 	nc.Con, _ = ae.NewModule("Newscast")
-	socket, _ := nc.Con.Register(proto.RootDNA, &nc.DNA)
-	nc.State = &proto.PeerState{}
+	res, dna, _ := nc.Con.Register(proto.RootDNA)
 
+	nc.DNA = dna
+
+	socket := res.Socket
+	nc.State = &proto.PeerState{Source: res.ID}
+
+	nc.ID = res.ID
+	nc.We = &proto.CacheEntry{Agent: nc.ID, Time: &proto.Timestamp{Sec: 99999}}
 	_ = socket
+
+	log.Printf("Initialized module our DNA: %#v", nc.DNA)
+
+	log.Printf("starting passive thread on %s", socket)
+
 	go nc.PassiveThread(socket)
 	log.Printf("starting active thread")
 	_, _ = nc.Con.Rpc.Status()

@@ -99,6 +99,7 @@ type Module struct {
 type RegisterRes struct {
 	Socket string `thrift:"1,required" json:"Socket"`
 	DNA *Common.P2PDNA `thrift:"2,required" json:"DNA"`
+	ID *Common.Peer `thrift:"3,required" json:"ID"`
 }
 
 type Service struct {

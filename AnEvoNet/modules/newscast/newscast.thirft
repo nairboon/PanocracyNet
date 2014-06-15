@@ -13,7 +13,8 @@ struct CacheEntry {
 }
 
 struct PeerState {
-  1: list<CacheEntry> NewsItems
+	1: Common.Peer Source,
+  2: list<CacheEntry> NewsItems
 }
 
 service newscast {

@@ -72,6 +72,7 @@ import (
 	erpc "p2p_rpc"
 	"path/filepath"
 	//"strings"
+	"runtime"
 	"time"
 )
 
@@ -79,6 +80,121 @@ type Module struct {
 	Name   string
 	Socket string
 	DNA    *Common.P2PDNA
+}
+
+func (m *Module) Listen() error {
+
+	//server, _ := zmq3.NewSocket(zmq3.REP)
+
+	//fp := zmq.FixUnixSocketPath(m.Socket)
+	//err := server.Bind(fmt.Sprintf("ipc://%s", fp))
+
+	//if err != nil {
+	//	log.Errorf("cannot listen on socket: %s", err)
+	//	return err
+	//}
+
+	return nil
+}
+
+/*
+ send message over the module socket, this should trigger an RPC call
+*/
+func (m *Module) SendMessage(msg string, rch chan []byte, ech chan error) (string, error) {
+	log.Infof("send message to local module")
+	//server, _ := zmq3.NewSocket(zmq3.REP)
+
+	//fp := zmq.FixUnixSocketPath(m.Socket)
+	//err := server.Bind(fmt.Sprintf("ipc://%s", fp))
+
+	//if err != nil {
+	//	log.Errorf("cannot listen on socket: %s", err)
+	//	return err
+	//}
+
+	//con := zmq.NewZMQUnixConnection(m.Socket)
+
+	con, err := net.Dial("tcp", m.Socket)
+	if err != nil {
+		panic(err)
+	}
+
+	//con := zmq.NewFramedReadWriteCloser(z, 0)
+	con.Write([]byte(msg))
+	log.Infof("Sent message over ZMQ to %s", m.Socket)
+
+	//con.Flush()
+	//con.Send()
+	//z.Send()
+
+	res := make([]byte, 200)
+	log.Infof("Going to read on SOCKET")
+
+	/*ch := make(chan []byte)
+	eCh := make(chan error)
+
+	// Start a goroutine to read from our net connection
+	go func(ch chan []byte, eCh chan error) {
+		for {
+			// try to read the data
+			data := make([]byte, 512)
+			_, err := con.Read(data)
+			if err != nil {
+				// send an error if it's encountered
+				eCh <- err
+				return
+			}
+			// send data if we read some.
+			ch <- data
+		}
+	}(ch, eCh)
+
+	ok := true
+	for ok {
+		select {
+		// This case means we recieved data on the connection
+		case data := <-ch:
+			log.Infof("DATA %s", data)
+
+			// Do something with the data
+			res = data
+		// This case means we got an error and the goroutine has finished
+		case err := <-eCh:
+			log.Infof("ERROR %v", err)
+
+			// handle our error then exit for loop
+			break
+		// This will timeout on the read.
+		case _ = <-time.Tick(time.Second):
+			log.Infof("Second TIMEOUT")
+			ok = false
+			// do nothing? this is just so we can time out if we need to.
+			// you probably don't even need to have this here unless you want
+			// do something specifically on the timeout.
+			break
+		}
+	}*/
+	con.SetReadDeadline(time.Now().Add(2 * time.Second))
+	n, err := con.Read(res)
+	log.Infof("Got answer l(%d) %#v   %#v", n, err, res)
+
+	mp := runtime.GOMAXPROCS(0)
+
+	log.Infof("some stats %d -- %d", mp, runtime.NumGoroutine())
+	if n == 0 {
+		panic(0)
+		ech <- errors.New("Connection timedout")
+		rch <- []byte("")
+	}
+	res = res[:n]
+	//con.Close()
+	rch <- res
+	ech <- nil
+	log.Infof("sent res to channels")
+
+	time.Sleep(2 * time.Second)
+
+	return string(res[:n]), nil
 }
 
 type LocalConnection struct {
@@ -115,16 +231,29 @@ func (c *LocalConnection) Listen() error {
 			}
 
 			identity, _ := server.GetIdentity()
+
 			//content := msg[0]
 			//identity, content := pop(msg)
 
-			log.Infof("recv msg from %s: %s\n", identity, msg)
-			// TODO: wait for response
+			log.Infof("recv msg from %v -> %s\n", identity, msg)
 			//out := OutboundData{Target: c.Target, Module: c.Module, Data: []byte(strings.Join(content, ""))}
-			//c.Out <- out
+			out := OutboundData{Target: c.Target, Module: c.Module, Data: []byte(msg)}
+
+			out.Answer = make(chan []byte)
+			//TODO: timeout
+			c.Out <- out
+			log.Infof("sent to outbound, wait for result...")
+
+			//answer := make([]byte, 1024)
+
+			answer := <-out.Answer
+
+			log.Infof("we got an answer: %v", answer)
+
 			//log.Infof("sending back to (%s) (%d): %s\n", identity, len(res), res)
-			server.Send("ACK", 0)
-			//log.Info("done sending!!!")
+			server.Send(string(answer), 0)
+			//server.Send("", 0)
+			log.Info("done sending!!!")
 		}
 		defer server.Close()
 	}()
@@ -136,8 +265,20 @@ type RemoteConnection struct {
 	Us         *Anevonet
 	Connection *net.Conn
 	Out        OutboundDataChannel
+	Client     erpc.RemoteRpcClient
 }
 
+func (c *RemoteConnection) Send(data OutboundData) (*erpc.Message, error) {
+
+	req := erpc.Message{Module: data.Module, Payload: string(data.Data)}
+	res, err := c.Client.SendMessage(&req)
+	if err != nil {
+		log.Error(err)
+		return &erpc.Message{}, errors.New("cannot rpc with peer")
+	}
+
+	return res, nil
+}
 func (c *RemoteConnection) Connect() error {
 	log.Infof("Remote Connect\n")
 
@@ -149,7 +290,7 @@ func (c *RemoteConnection) Connect() error {
 
 	client := thrift.NewClient(thrift.NewFramedReadWriteCloser(conn, 0), thrift.NewBinaryProtocol(true, false), false)
 	p2p := erpc.RemoteRpcClient{client}
-
+	c.Client = p2p
 	hi := erpc.HelloSYN{NodeID: c.Us.ID.ID, Version: Common.VERSION}
 	res, err := p2p.Hello(&hi)
 	if err != nil {
@@ -166,6 +307,7 @@ type OutboundData struct {
 	Module string
 	Data   []byte
 	Target *Common.Peer
+	Answer chan []byte
 }
 
 type OutboundDataChannel chan OutboundData
@@ -174,6 +316,7 @@ type PeerRConnection struct {
 	Peer       *Common.Peer
 	Connection *RemoteConnection
 }
+
 type Anevonet struct {
 	Engine           *xorm.Engine
 	Modules          map[string]*Module
@@ -198,8 +341,19 @@ func (a *Anevonet) Proxy() {
 	for {
 		select {
 		case d := <-a.Outbound:
-			log.Infof("Sending:", d)
+			log.Infof("Going to send: %v", d)
 
+			con, ok := a.Connections[d.Target.ID]
+			if !ok {
+				log.Errorf("we have no connection to %v", d.Target)
+			}
+			res, err := con.Connection.Send(d)
+			if err != nil {
+				log.Errorf("Failed: %v", err)
+			}
+
+			log.Infof("got response: %v, forward..", res)
+			d.Answer <- []byte(res.Payload)
 		}
 	}
 
@@ -215,13 +369,20 @@ func (a *Anevonet) RegisterModule(module *irpc.Module) (*irpc.RegisterRes, error
 	m := &Module{Name: module.Name, DNA: module.DNA, Socket: a.Dir + "/sockets/modules/" + module.Name}
 	a.Modules[module.Name] = m
 
+	m.Socket = fmt.Sprintf(":%d", a.ID.Port+23)
 	basepath := a.Dir + "/sockets/modules/"
 	err := os.MkdirAll(basepath, 0766)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	res := &irpc.RegisterRes{DNA: m.DNA, Socket: m.Socket}
+	err = m.Listen()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	res := &irpc.RegisterRes{DNA: m.DNA, Socket: m.Socket, ID: &a.ID}
+	log.Infof("RegisterModule (%v)", res)
 	return res, nil
 }
 
@@ -253,8 +414,8 @@ func (a *Anevonet) RequestConnection(req *irpc.ConnectionReq) (*irpc.ConnectionR
 	if err != nil {
 		log.Fatal(err)
 	}
-	s := &LocalConnection{Module: req.Module, Target: req.Target, Socket: basepath + fmt.Sprintf("%s-%d", req.Target.IP, req.Target.Port),
-		Out: a.Connections[req.Target.ID].Connection.Out}
+	s := &LocalConnection{Module: req.Module, Target: req.Target, Socket: basepath + fmt.Sprintf("%s-%d", req.Target.IP, req.Target.Port)}
+	/*Out: a.Connections[req.Target.ID].Connection.Out*/
 	a.Tunnels[req.Target] = s
 	s.Out = a.Outbound
 	// Listen locally for modules sending data
@@ -430,15 +591,54 @@ type P2PRPCServer struct {
 }
 
 func (s *P2PRPCServer) Hello(hello *erpc.HelloSYN) (*erpc.HelloSYNACK, error) {
-	log.Infof("Hello from %s\n", hello.Version)
+	log.Infof("RPC:Hello from %s\n", hello.Version)
 	resp := erpc.HelloSYNACK{NodeID: s.ae.ID.ID, Version: Common.VERSION, SupportedTransport: s.ae.Transports}
 	return &resp, nil
 }
 
 func (s *P2PRPCServer) Connect(c *erpc.ConnectSYN) (bool, error) {
-	log.Infof("connect from %s\n", c.NodeID)
+	log.Infof("RPC:connect from %s\n", c.NodeID)
 	//resp := erpc.HelloSYNACK{NodeID: s.ae.ID.ID, Version: Common.VERSION}
 	return true, nil
+}
+
+func (s *P2PRPCServer) SendMessage(m *erpc.Message) (*erpc.Message, error) {
+	log.Infof("RPC:send message %v\n", m)
+	//resp := erpc.HelloSYNACK{NodeID: s.ae.ID.ID, Version: Common.VERSION}
+
+	// lookup module
+	if _, ok := s.ae.Modules[m.Module]; !ok {
+		log.Errorf("module %v does not exist in %v", m.Module, s.ae.Modules)
+		return &erpc.Message{}, errors.New("Module does not exist")
+	}
+	module := s.ae.Modules[m.Module]
+
+	rch := make(chan []byte)
+	eCh := make(chan error)
+	go module.SendMessage(m.Payload, rch, eCh)
+	log.Infof("checking channels ...")
+
+	var res []byte
+	var err error
+	stop := false
+	for !stop {
+		select {
+		// This case means we recieved data on the connection
+		case res = <-rch:
+			log.Infof("A res: %v", res)
+			stop = true
+			break
+
+		case err = <-eCh:
+			log.Infof("An err: %v", err)
+			stop = true
+			break
+		}
+	}
+
+	log.Infof("We received msg from module %#v %#v", res, err)
+
+	return &erpc.Message{Module: m.Module, Payload: string(res)}, err
 }
 
 func (a *Anevonet) P2PRPC(port int32) {
@@ -483,6 +683,7 @@ func main() {
 	flag.StringVar(&id, "id", "0000", "peerid")
 	flag.Parse()
 
+	runtime.GOMAXPROCS(runtime.NumCPU())
 	log.Infof("staring daemon on %d and %d in %s\n", backendport, p2pport, dir)
 
 	d, _ := filepath.Abs(dir)

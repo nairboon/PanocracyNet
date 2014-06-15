@@ -23,6 +23,7 @@ struct ConnectionRes {
 struct RegisterRes {
  1: string Socket,
  2: Common.P2PDNA DNA,
+3: Common.Peer ID
 }
 
 struct StatusRes {

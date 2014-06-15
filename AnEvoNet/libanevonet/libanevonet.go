@@ -6,6 +6,7 @@ import (
 	//"errors"
 	"flag" //flag "github.com/ogier/pflag"
 	log "github.com/golang/glog"
+	golog "log"
 	//"github.com/samuel/go-thrift/thrift"
 	zmq "libzmqthrift"
 	//"net"
@@ -81,16 +82,19 @@ func (a *AnEvoConnection) GetPeerConnection(p *Common.Peer) (zmq.RPCClient, erro
 	return client, nil
 }
 
-func (a *AnEvoConnection) Register(rootdna Common.P2PDNA, dna *Common.P2PDNA) (string, error) {
+func (a *AnEvoConnection) Register(rootdna Common.P2PDNA) (*rpc.RegisterRes, Common.P2PDNA, error) {
 	log.Infof("Register Module: %s", a.Name)
 	r, err := a.Rpc.RegisterModule(&rpc.Module{Name: a.Name, DNA: &rootdna})
 	log.Infof("done registering")
 	if err != nil {
-		return "", err
+		return &rpc.RegisterRes{}, Common.P2PDNA{}, err
 	}
 	// check db for better dna
-	dna = r.DNA
-	return r.Socket, nil
+	dna := *r.DNA
+
+	golog.Printf("DNA is %#v vs %#v", dna, rootdna)
+
+	return r, dna, nil
 }
 
 var flagSet = false

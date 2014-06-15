@@ -89,6 +89,11 @@ type HelloSYNACK struct {
 	SupportedTransport map[Common.Transport]int32 `thrift:"3,required" json:"SupportedTransport"`
 }
 
+type Message struct {
+	Module string `thrift:"1,required" json:"Module"`
+	Payload string `thrift:"2,required" json:"Payload"`
+}
+
 type News struct {
 	Version string `thrift:"1,required" json:"version"`
 	NodeId string `thrift:"2,required" json:"node_id"`
@@ -105,6 +110,7 @@ type RPCClient interface {
 type RemoteRpc interface {
 	Connect(C *ConnectSYN) (bool, error)
 	Hello(H *HelloSYN) (*HelloSYNACK, error)
+	SendMessage(M *Message) (*Message, error)
 }
 
 type RemoteRpcServer struct {
@@ -123,6 +129,12 @@ func (s *RemoteRpcServer) Hello(req *RemoteRpcHelloRequest, res *RemoteRpcHelloR
 	return err
 }
 
+func (s *RemoteRpcServer) SendMessage(req *RemoteRpcSendMessageRequest, res *RemoteRpcSendMessageResponse) error {
+	val, err := s.Implementation.SendMessage(req.M)
+	res.Value = val
+	return err
+}
+
 type RemoteRpcConnectRequest struct {
 	C *ConnectSYN `thrift:"1,required" json:"c"`
 }
@@ -137,6 +149,14 @@ type RemoteRpcHelloRequest struct {
 
 type RemoteRpcHelloResponse struct {
 	Value *HelloSYNACK `thrift:"0,required" json:"value"`
+}
+
+type RemoteRpcSendMessageRequest struct {
+	M *Message `thrift:"1,required" json:"m"`
+}
+
+type RemoteRpcSendMessageResponse struct {
+	Value *Message `thrift:"0,required" json:"value"`
 }
 
 type RemoteRpcClient struct {
@@ -158,5 +178,14 @@ func (s *RemoteRpcClient) Hello(H *HelloSYN) (*HelloSYNACK, error) {
 	}
 	res := &RemoteRpcHelloResponse{}
 	err := s.Client.Call("Hello", req, res)
+	return res.Value, err
+}
+
+func (s *RemoteRpcClient) SendMessage(M *Message) (*Message, error) {
+	req := &RemoteRpcSendMessageRequest{
+		M: M,
+	}
+	res := &RemoteRpcSendMessageResponse{}
+	err := s.Client.Call("SendMessage", req, res)
 	return res.Value, err
 }

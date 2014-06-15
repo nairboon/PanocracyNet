@@ -71,9 +71,9 @@ func (z *ZmqConnection) Write(buf []byte) (n int, err error) {
 }
 func (z *ZmqConnection) Send() {
 	z.mu.Lock()
-	fmt.Printf("sending: %s\n", z.outbuf.String())
+	fmt.Printf("sending: %v\n", z.outbuf.String())
 	sent, err := z.Sock.SendMessage(z.outbuf.String())
-	fmt.Printf("sent: %d %s\n", sent, err)
+	fmt.Printf("sent: %d %v\n", sent, err)
 	z.outbuf.Reset()
 	z.mu.Unlock()
 	return
